@@ -1113,17 +1113,17 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
                     </>
                   )}
 
-                  {/* BORROW CONTENT */}
+                  {/* BORROW CONTENT 
                   {showBuyBorrowModal === 'borrow' && (
                     <div className="flex-1 place-items-start overflow-y-auto px-4 py-4">
                       <div className='flex-shrink-0 flex items-start py-4 mb-4'>
 
-                          {/* Book Name */}
+                          
                         <div className="px-4 pt-2 pb-1 max-w-[16rem]">
                           <h2 className="text-lg font-bold line-clamp-3 text-neutral-900">"{selectedBook?.title}"</h2>
                           <p className="text-sm text-neutral-500">Find libraries near you that may have this book.</p>
                         </div>
-                        {/* image */}
+                        
                         {selectedBook?.coverImage && (
                           <div className="px-4 pb-2">
                             <img
@@ -1143,7 +1143,7 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
                           className="w-full h-32 rounded-xl object-cover border border-neutral-200 mb-3"
                         />
                       )}
-                      {/* Disclaimer */}
+                      
                       <div className="text-xs text-neutral-500 italic mb-3">
                         Note: Library availability may vary. Check with the library for current status. Accurate stock status may not be available.
                       </div>
@@ -1200,7 +1200,7 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
                             })}
                           </div>
 
-                          {/* See more */}
+                          
                           <div className="flex items-center justify-center mt-2">
                             <button
                               disabled={!libHasMore || libLoading}
@@ -1214,6 +1214,8 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
                       )}
                     </div>
                   )}
+
+                  */}
                 </div>
               </div>
             )}
