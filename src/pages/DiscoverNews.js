@@ -857,7 +857,7 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
                   </span>
                 </button>
 
-                {/* BORROW */}
+                {/* BORROW 
                 <button
                   className="group relative flex-1 px-4 py-3 rounded-2xl text-left shadow-md text-white
                             bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700
@@ -869,21 +869,21 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
                   aria-label="Borrow from libraries nearby"
                 >
                   <span className="flex items-center gap-3">
-                    {/* Icon bubble */}
+                    
                     <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-white/15 ring-1 ring-white/20 shadow-sm">
-                      {/* Book open icon */}
+                      
                       <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden="true">
                         <path d="M12 6c-2.2-1.2-4.6-1.2-7 0v11.5c2.4-1.2 4.8-1.2 7 0m0-11.5c2.2-1.2 4.6-1.2 7 0v11.5c-2.4-1.2-4.8-1.2-7 0" className="stroke-white/90" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     </span>
 
-                    {/* Text */}
+                    
                     <span className="min-w-0">
                       <span className="block text-sm font-semibold leading-5">Borrow</span>
                       <span className="block text-[11px] leading-4 opacity-90">Libraries near you</span>
                     </span>
 
-                    {/* Chevron */}
+                    
                     <span className="ml-auto opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition">
                       <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden="true">
                         <path d="M9 6l6 6-6 6" className="stroke-white/90" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
@@ -891,7 +891,7 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
                     </span>
                   </span>
                 </button>
-
+                */}
                 {/* LIKE */}
                 <button
                   className={`group w-fit h-fit self-center rounded-full text-sm font-semibold transition-all duration-200 flex disabled:opacity-60
