@@ -746,8 +746,8 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/30 to-transparent" />
           <div
-            className="absolute top-2 left-2 text-[11px] font-semibold px-2 py-1 rounded-full capitalize"
-            style={{ background: accent, color: '#111' }}
+            className="absolute top-2 left-2 text-[11px] font-semibold px-2 py-1 rounded-full capitalize bg-white/90 text-black/80 shadow genre-pulse"
+            
           >
             {lead._genre || lead.categories?.[0] || 'Books'}
           </div>
