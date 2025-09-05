@@ -9,6 +9,7 @@
     "@testing-library/user-event": "^13.5.0",
     "axios": "^0.21.1",
     "color-thief-browser": "^2.0.2",
+    "dayjs": "^1.11.18",
     "html5-qrcode": "^2.3.8",
     "leaflet": "^1.9.4",
     "lodash.debounce": "^4.0.8",

@@ -6,6 +6,7 @@ import { reverseGeocode } from '../utils/reverseGeocode';
 import { BottomSheet } from 'react-spring-bottom-sheet';
 import 'react-spring-bottom-sheet/dist/style.css';
 import { MERCHANTS, AVATARS, GENRE_GRADIENTS, GENRE_ACCENTS } from '../constants/appConstants';
+import dayjs from 'dayjs'; // npm install dayjs
 
 // Helper for ASIN validation
 const isValidASIN = id => id && !/^\d{10,13}$/.test(id);
@@ -89,8 +90,11 @@ function MerchantLogoBg({ merchant, children }) {
   );
 }
 
-const PAGE_SIZE = 6; // fetch 6 at a time
+const PAGE_SIZE = 8; // fetch 6 at a time
 const MARKER_COLORS = { buy: '#2563eb', borrow: '#4f46e5' }; // blue / indigo
+
+const BOOKS_PER_PAGE = 8;
+const BOOKS_TO_SHOW = 12;
 
 export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
   // Core state
@@ -151,6 +155,75 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
   const genreGradient = GENRE_GRADIENTS[genreKey] || GENRE_GRADIENTS.default;
   const genreAccent = GENRE_ACCENTS[genreKey] || GENRE_ACCENTS.default;
 
+  const [teasers, setTeasers] = useState({}); // bookId: teaser
+
+  const [currentPage, setCurrentPage] = useState(0);
+  const TOP_BOOKS_PER_PAGE = 4; // or 3, set how many books per page you want
+  const pagedBooks = useMemo(() => {
+    const start = currentPage * BOOKS_PER_PAGE;
+    return books.slice(start, start + BOOKS_PER_PAGE);
+  }, [books, currentPage]);
+
+  const totalPages = Math.max(1, Math.ceil(books.length / BOOKS_PER_PAGE));
+
+  const topBooks = useMemo(() => books.slice(0, BOOKS_TO_SHOW), [books]);
+
+  // Get paged books for the river (excluding lead book)
+  const pagedTopBooks = useMemo(() => {
+    const start = 1 + currentPage * TOP_BOOKS_PER_PAGE;
+    return topBooks.slice(start, start + TOP_BOOKS_PER_PAGE);
+  }, [topBooks, currentPage]);
+
+  const TEASER_TTL_DAYS = 7;
+
+  function getTeaserFromCache(bookId) {
+    const raw = localStorage.getItem(`teaser_${bookId}`);
+    if (!raw) return null;
+    try {
+      const { teaser, expires } = JSON.parse(raw);
+      if (expires && dayjs().isBefore(dayjs(expires))) return teaser;
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  function setTeaserInCache(bookId, teaser) {
+    const expires = dayjs().add(TEASER_TTL_DAYS, 'day').toISOString();
+    localStorage.setItem(`teaser_${bookId}`, JSON.stringify({ teaser, expires }));
+  }
+
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchTeasers() {
+      const teaserMap = {};
+      for (const book of topBooks) {
+        if (!book || !book.id) continue;
+        let teaser = getTeaserFromCache(book.id);
+        if (!teaser) {
+          try {
+            const res = await apiCall('/api/books/ai-teaser', {
+              method: 'POST',
+              data: {
+                title: book.title,
+                author: book.author,
+                summary: book.summary
+              }
+            });
+            teaser = res.data.teaser || '';
+            setTeaserInCache(book.id, teaser);
+          } catch {
+            teaser = '';
+          }
+        }
+        teaserMap[book.id] = teaser;
+      }
+      if (isMounted) setTeasers(teaserMap);
+    }
+    if (topBooks.length) fetchTeasers();
+    return () => { isMounted = false; };
+  }, [topBooks]); // Only run when topBooks changes
+
   // Header/tab bar
   useEffect(() => {
     setShowHeader?.(true);
@@ -160,42 +233,54 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
     setShowTabBar && setShowTabBar(!openSheet);
   }, [openSheet, setShowTabBar]);
 
-  // Fetch books (home-batch)
-  useEffect(() => {
-    async function fetchBooks() {
-      let genres = [];
-      if (profile.genres?.length) {
-        genres = profile.genres;
-      } else {
-        genres = JSON.parse(localStorage.getItem('preferredGenres') || '["fiction"]');
-      }
-      try {
-        const res = await apiCall('/api/books/home-batch', {
-          method: 'GET',
-          params: { genres: genres.map(g => g.toLowerCase()).join(',') }
-        });
-        const allBooks = [];
-        const genreData = res.data.genres || [];
-        for (const genreObj of genreData) {
-          const booksFetched = genreObj.books || [];
-          allBooks.push(...booksFetched.map(b => ({ ...b, _genre: genreObj.genre })));
-        }
-        const seen = new Set();
-        const deduped = [];
-        for (const b of allBooks) {
-          if (!seen.has(b.id)) {
-            deduped.push(b);
-            seen.add(b.id);
-          }
-        }
-        setBooks(deduped);
-        setSelectedBook(prev => prev || (deduped.length ? deduped[0] : null));
-      } catch (e) {
-        console.error('Failed to fetch books:', e);
-        setBooks([]);
-      }
+  // Fetch books (home-batch) with mixed genres
+  async function fetchBooksAndScrollTop() {
+    let genres = [];
+    if (profile.genres?.length) {
+      genres = profile.genres;
+    } else {
+      genres = JSON.parse(localStorage.getItem('preferredGenres') || '["fiction","history","fantasy","science","biography"]');
     }
-    fetchBooks();
+    const ALL_GENRES = [
+      "fiction", "fantasy", "mystery", "romance", "biography", "thriller", "self-help",
+      "history", "science", "horror", "adventure", "classic", "poetry", "children", "education", "health", "cookbook"
+    ];
+    const extraGenres = ALL_GENRES.filter(g => !genres.includes(g));
+    const randomExtras = extraGenres.sort(() => 0.5 - Math.random()).slice(0, 3);
+    const mixedGenres = [...genres, ...randomExtras];
+
+    try {
+      const res = await apiCall('/api/books/home-batch', {
+        method: 'GET',
+        params: { genres: mixedGenres.map(g => g.toLowerCase()).join(',') }
+      });
+      const allBooks = [];
+      const genreData = res.data.genres || [];
+      for (const genreObj of genreData) {
+        const booksFetched = genreObj.books || [];
+        allBooks.push(...booksFetched.map(b => ({ ...b, _genre: genreObj.genre })));
+      }
+      // Shuffle for variety and deduplicate
+      const seen = new Set();
+      const deduped = [];
+      for (const b of allBooks.sort(() => 0.5 - Math.random())) {
+        if (!seen.has(b.id)) {
+          deduped.push(b);
+          seen.add(b.id);
+        }
+      }
+      setBooks(deduped.slice(0, BOOKS_TO_SHOW));
+      setSelectedBook(deduped.length ? deduped[0] : null);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (e) {
+      console.error('Failed to fetch books:', e);
+      setBooks([]);
+    }
+  }
+
+  useEffect(() => {
+    fetchBooksAndScrollTop();
+    // eslint-disable-next-line
   }, [profile]);
 
   // AI summary (cached by volume id)
@@ -526,6 +611,8 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
       .then(res => setOpenLibraryAvailability(res.data || res))
       .catch(() => setOpenLibraryAvailability(null));
   }, [selectedBook]);
+  // refresh OL availability when modal opens
+  const [refreshing, setRefreshing] = useState(false);
 
   // Actions
   const handleBookOpen = (book) => {
@@ -583,8 +670,6 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
     handleBookOpen(newBook);
   };
 
-  const topBooks = selectedBook ? [selectedBook, ...books.filter(b => b.id !== selectedBook.id)] : books;
-
   // Load-more handlers
   const loadMoreBuy = async () => {
     if (buyLoading || !buyHasMore) return;
@@ -626,48 +711,251 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
           style={{ background: openSheet ? genreGradient : 'transparent', opacity: openSheet ? 1 : 0, pointerEvents: 'none', transition: 'all 0.7s cubic-bezier(0.4,0,0.2,1)' }}
         />
 
-        {/* Top Books */}
-        <div className="w-full flex flex-col items-center justify-center px-2 relative z-10 bg-white">
-          {topBooks.map((book, idx) => {
-            const isSelected = book.id === selectedBook?.id && openSheet;
-            const bookGenre = (book._genre || book.genres?.[0] || 'default').toLowerCase();
-            const bookGenreGradient = GENRE_GRADIENTS[bookGenre] || GENRE_GRADIENTS.default;
-            const bookGenreAccent = GENRE_ACCENTS[bookGenre] || GENRE_ACCENTS.default;
-            const bookBg = isSelected ? bookGenreGradient : 'white';
+        {/* Top Books Redesign */}
+        <div className="min-h-screen w-full bg-white">
+          {/* Header / Masthead */}
+          <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-neutral-200 px-4 py-3">
+            <div className="flex items-center justify-between">
+              <div className="text-xl font-extrabold tracking-tight">Discover</div>
+              <div className="text-xs text-neutral-500">For you</div>
+            </div>
+          </div>
 
-            return (
-              <div
-                key={book.id || `${book.title}-${idx}`}
-                className="w-full mx-auto overflow-hidden flex md:flex-row-reverse items-center transition-all duration-500 cursor-pointer rounded-md"
-                style={{ minHeight: isSelected ? 260 : 160, background: bookBg, transform: isSelected ? 'scale(1)' : 'scale(.96)', zIndex: isSelected ? 20 : 1 }}
-                onClick={() => handleBookChange(book)}
-              >
-                <div className="flex-shrink-0 flex items-center justify-center p-4">
-                  <img
-                    src={book.coverImage}
-                    alt={book.title}
-                    className={`rounded-xl shadow-lg bg-white ${isSelected ? 'w-28 h-40 md:w-32 md:h-48' : 'w-20 h-28'}`}
-                    style={{ userSelect: 'none', pointerEvents: 'none', transition: 'all 0.5s', boxShadow: isSelected ? '0 4px 20px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)' }}
-                  />
+{/* Lead Story (first book) */}
+{topBooks.length > 0 && (() => {
+  const lead = topBooks[0];
+  const genreKey = (lead._genre || lead.categories?.[0] || 'default').toLowerCase();
+  const accent = (GENRE_ACCENTS[genreKey] || GENRE_ACCENTS.default);
+  const teaser = typeof teasers?.[lead.id] === 'string' ? teasers[lead.id] : null;
+  
+
+  return (
+    <article
+      className="px-4 pt-3 pb-4 active:opacity-90"
+      onClick={() => handleBookChange(lead)}
+      role="button"
+      aria-label={`Open ${lead.title}`}
+    >
+      <div className="relative rounded-2xl overflow-hidden shadow-sm bg-neutral-200">
+        <div className="relative w-full aspect-[16/9] sm:aspect-[21/9] bg-neutral-100">
+          <img
+            src={lead.coverImage || '/default-cover.png'}
+            alt={lead.title}
+            className="absolute inset-0 w-full h-full object-cover"
+            loading="eager"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/30 to-transparent" />
+          <div
+            className="absolute top-2 left-2 text-[11px] font-semibold px-2 py-1 rounded-full capitalize"
+            style={{ background: accent, color: '#111' }}
+          >
+            {lead._genre || lead.categories?.[0] || 'Books'}
+          </div>
+        </div>
+        <div className="absolute bottom-0 left-0 right-0 p-4">
+          <h1 className="text-[20px] leading-snug font-extrabold text-white drop-shadow-sm line-clamp-3">
+            {lead.title}
+          </h1>
+          {teaser ? (
+            <p className="text-[13px] text-white/90 mt-2 line-clamp-3">
+              {teaser}
+            </p>
+          ) : (
+            <div className="mt-2 space-y-2">
+              <div className="h-3 w-11/12 rounded bg-white/30 animate-pulse" />
+              <div className="h-3 w-10/12 rounded bg-white/25 animate-pulse" />
+              <div className="h-3 w-8/12 rounded bg-white/20 animate-pulse" />
+            </div>
+          )}
+          <div className="mt-3 flex items-center gap-2 text-[11px] text-white/80">
+            <span>By {lead.author || 'Unknown'}</span>
+            <span className="opacity-60">•</span>
+            <span>{lead.publishedDate || 'Publication date n/a'}</span>
+            <span className="ml-auto inline-flex items-center gap-1 bg-white/10 backdrop-blur px-2 py-1 rounded-full">
+              <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+              Read
+            </span>
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+})()}
+
+{/* River (rest of books) */}
+<div className="divide-y divide-neutral-100">
+  {topBooks.slice(1).map((b, idx) => {
+    const isFeature = ((idx + 1) % 4 === 0);
+    const genreKey = (b._genre || b.categories?.[0] || 'default').toLowerCase();
+    const accent = (GENRE_ACCENTS[genreKey] || GENRE_ACCENTS.default);
+    const teaser = typeof teasers?.[b.id] === 'string' ? teasers[b.id] : null;
+
+    if (isFeature) {
+      // Feature card
+      return (
+        <article
+          key={b.id}
+          className="py-4 active:opacity-95"
+          onClick={() => handleBookChange(b)}
+          role="button"
+          aria-label={`Open ${b.title}`}
+        >
+          <div className="relative w-full">
+            <div className="relative mx-0 overflow-hidden">
+              <div className="relative w-full aspect-[16/9] sm:aspect-[21/9] bg-neutral-200">
+                <img
+                  src={b.coverImage || '/default-cover.png'}
+                  alt={b.title}
+                  className="absolute inset-0 w-full h-full object-cover"
+                  loading="lazy"
+                />
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background: `linear-gradient(to top, rgba(0,0,0,0.82), rgba(0,0,0,0.35) 45%, transparent 80%)`,
+                  }}
+                />
+                <div
+                  className="absolute top-2 left-4 text-[11px] font-semibold px-2 py-1 rounded-full capitalize bg-white/90 text-black/80 shadow"
+                >
+                  {b._genre || b.categories?.[0] || 'Books'}
                 </div>
-                <div className="flex flex-col items-start justify-center p-4 min-w-0 w-full">
-                  <div
-                    className={`text-xs font-bold mb-2 px-3 py-1 rounded-full capitalize tracking-wider ${isSelected ? 'text-black genre-pulse' : 'text-neutral-600'}`}
-                    style={{ backgroundColor: isSelected ? bookGenreAccent : '#f3f4f6', boxShadow: isSelected ? '0 2px 8px rgba(0,0,0,0.15)' : 'none', letterSpacing: '0.05em' }}
-                  >
-                    {book._genre || book.genres?.[0] || 'Unknown Genre'}
+                <div className="absolute left-0 right-0 bottom-0 px-4 pb-4">
+                  <h3 className="text-[18px] sm:text-[20px] font-extrabold leading-snug text-white line-clamp-3 drop-shadow">
+                    {b.title}
+                  </h3>
+                  <div className="mt-3 flex items-center gap-2 text-[11px] text-white/80">
+                    <span className="truncate">By {b.author || 'Unknown'}</span>
+                    {b.publishedDate ? (
+                      <>
+                        <span className="opacity-60">•</span>
+                        <span className="truncate">{b.publishedDate}</span>
+                      </>
+                    ) : null}
+                    <span className="ml-auto inline-flex items-center gap-1 bg-white/10 backdrop-blur px-2 py-1 rounded-full">
+                      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
+                      </svg>
+                      Read
+                    </span>
                   </div>
-                  <h2 className={`mb-1 truncate w-full font-extrabold ${isSelected ? 'text-2xl' : 'text-xl text-neutral-700'}`} style={{ color: isSelected ? '#222' : undefined }}>
-                    {book.title}
-                  </h2>
-                  <div className={`mb-2 truncate w-full font-semibold ${isSelected ? 'text-lg' : 'text-sm text-neutral-600'}`} style={{ color: isSelected ? '#555' : undefined }}>
-                    by {book.author}
-                  </div>
-                  {!isSelected && <div className="text-xs text-neutral-400 italic">Tap to explore</div>}
                 </div>
               </div>
-            );
-          })}
+            </div>
+          </div>
+        </article>
+      );
+    }
+
+    // Compact card
+    return (
+      <article
+        key={b.id}
+        className="px-4 py-4 active:bg-neutral-50"
+        onClick={() => handleBookChange(b)}
+        role="button"
+        aria-label={`Open ${b.title}`}
+      >
+        <div className="flex gap-3">
+          <div className="relative w-24 h-32 flex-shrink-0 rounded-xl overflow-hidden border border-neutral-200 bg-neutral-100">
+            <img
+              src={b.coverImage || '/default-cover.png'}
+              alt={b.title}
+              className="absolute inset-0 w-full h-full object-cover"
+              loading="lazy"
+            />
+            <div
+              className="absolute top-1.5 left-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full capitalize shadow bg-white/90 text-black/80"
+            >
+              {b._genre || b.categories?.[0] || 'Books'}
+            </div>
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-[16px] leading-snug font-extrabold text-neutral-900 line-clamp-2">
+              {b.title}
+            </h2>
+            {teaser ? (
+              <p className="text-[13px] text-neutral-700 mt-1 line-clamp-3">
+                {teaser}
+              </p>
+            ) : (
+              <div className="mt-1 space-y-2">
+                <div className="h-3 w-10/12 rounded bg-neutral-200 animate-pulse" />
+                <div className="h-3 w-8/12 rounded bg-neutral-200 animate-pulse" />
+              </div>
+            )}
+            <div className="mt-2 flex items-center text-[11px] text-neutral-500">
+              <span className="truncate">By {b.author || 'Unknown'}</span>
+              {b.pageCount ? <span className="px-2">·</span> : null}
+              {b.pageCount ? <span>{b.pageCount} pages</span> : null}
+              {b.publishedDate ? <span className="px-2">·</span> : null}
+              {b.publishedDate ? <span className="truncate">{b.publishedDate}</span> : null}
+              <span className="ml-auto inline-flex items-center justify-center w-7 h-7 rounded-full bg-neutral-100 text-neutral-700">
+                <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </span>
+            </div>
+          </div>
+        </div>
+      </article>
+    );
+  })}
+</div>
+
+{/* Refresh Button */}
+<div className="flex justify-center items-center py-6">
+  <button
+    onClick={async () => {
+      if (refreshing) return;
+      setRefreshing(true);
+      try {
+        await fetchBooksAndScrollTop();
+      } finally {
+        setRefreshing(false);
+      }
+    }}
+    disabled={refreshing}
+    className="group relative inline-flex items-center gap-2 px-6 py-3 rounded-full
+               bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600
+               text-white font-semibold shadow-lg
+               transition-all active:scale-[0.98]
+               focus:outline-none focus:ring-2 focus:ring-orange-300
+               disabled:opacity-70 disabled:cursor-not-allowed"
+    aria-live="polite"
+  >
+    {/* subtle glow */}
+    <span className="pointer-events-none absolute -inset-1 rounded-full bg-orange-500/20 blur-md opacity-0 group-hover:opacity-100 transition-opacity" />
+
+    {/* sheen sweep */}
+    <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-full">
+      <span className="absolute left-[-150%] top-0 h-full w-[150%]
+                       bg-gradient-to-r from-transparent via-white/30 to-transparent
+                       transition-transform duration-700 ease-out
+                       group-hover:translate-x-[200%]" />
+    </span>
+
+    {/* icon */}
+    <span className="inline-flex h-5 w-5 items-center justify-center">
+      <svg
+        viewBox="0 0 24 24"
+        className={`h-5 w-5 ${refreshing ? 'animate-spin' : 'group-hover:rotate-45'} transition-transform`}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v6h6M20 20v-6h-6" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M20 9a8 8 0 10.001 6.001" />
+      </svg>
+    </span>
+
+    <span>{refreshing ? 'Refreshing…' : 'Refresh Books'}</span>
+  </button>
+</div>
+
+
         </div>
 
         {/* Bottom Sheet */}
@@ -851,7 +1139,7 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
                     {/* Chevron */}
                     <span className="ml-auto opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition">
                       <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden="true">
-                        <path d="M9 6l6 6-6 6" className="stroke-white/90" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" className="stroke-white/90" strokeWidth="2" fill="none" />
                       </svg>
                     </span>
                   </span>
@@ -886,7 +1174,7 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
                     
                     <span className="ml-auto opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition">
                       <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden="true">
-                        <path d="M9 6l6 6-6 6" className="stroke-white/90" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" className="stroke-white/90" strokeWidth="2" fill="none" />
                       </svg>
                     </span>
                   </span>

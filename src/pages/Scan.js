@@ -1,50 +1,121 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode';
+// app/components/Scan.js
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Html5QrcodeScanner, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { useNavigate } from 'react-router-dom';
 import { apiCall } from '../utils/api';
 
-// Device detection functions
+/* ----------------------------- Device helpers ---------------------------- */
 function isMobileDevice() {
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    navigator.userAgent
+  );
 }
-
 function isCameraSupported() {
   return !!(navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function');
 }
-
 function isHttpsOrLocalhost() {
-  return window.location.protocol === 'https:' || 
-         window.location.hostname === 'localhost' || 
-         window.location.hostname === '127.0.0.1';
+  return (
+    (typeof window !== 'undefined' &&
+      (window.location.protocol === 'https:' ||
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1')) ||
+    false
+  );
 }
 
-// ISBN validation function
-function isValidISBN(isbn) {
-  // Remove hyphens and spaces
-  const cleanISBN = isbn.replace(/[-\s]/g, '');
-  
-  // Check if it's a valid ISBN-10 or ISBN-13
-  return /^\d{10}(\d{3})?$/.test(cleanISBN) && cleanISBN.length >= 10;
+/* ------------------------------- ISBN utils ------------------------------ */
+const ONLY_DIGITS_OR_X = /[^0-9X]/gi;
+
+function cleanIsbn(raw) {
+  if (!raw) return '';
+  return String(raw).replace(/[-\s]/g, '').toUpperCase();
 }
 
+function isIsbn10(str) {
+  return /^[0-9]{9}[0-9X]$/.test(str);
+}
+function isIsbn13(str) {
+  return /^[0-9]{13}$/.test(str);
+}
+
+function validateIsbn10(isbn10) {
+  // 10 chars, last can be X
+  if (!isIsbn10(isbn10)) return false;
+  let sum = 0;
+  for (let i = 0; i < 9; i++) {
+    sum += (i + 1) * parseInt(isbn10[i], 10);
+  }
+  const checkChar = isbn10[9];
+  sum += checkChar === 'X' ? 10 * 10 : 10 * parseInt(checkChar, 10);
+  return sum % 11 === 0;
+}
+
+function validateIsbn13(isbn13) {
+  if (!isIsbn13(isbn13)) return false;
+  let sum = 0;
+  for (let i = 0; i < 12; i++) {
+    const n = parseInt(isbn13[i], 10);
+    sum += i % 2 === 0 ? n : 3 * n;
+  }
+  const check = (10 - (sum % 10)) % 10;
+  return check === parseInt(isbn13[12], 10);
+}
+
+function ean13ToIsbn13(ean) {
+  // Books typically have EAN starting with 978 or 979 → that *is* the ISBN-13
+  if (ean && ean.length === 13 && (ean.startsWith('978') || ean.startsWith('979'))) {
+    return ean;
+  }
+  return null;
+}
+
+function extractIsbnFromScan(decodedText) {
+  // 1) Clean obvious junk
+  const raw = cleanIsbn(decodedText);
+  // 2) Pull only digits/X for validation pass
+  const compact = raw.replace(ONLY_DIGITS_OR_X, '');
+
+  // Strict checks first
+  if (isIsbn13(compact) && validateIsbn13(compact)) return compact;
+  if (isIsbn10(compact) && validateIsbn10(compact)) return compact;
+
+  // Try extracting digits only (some scanners include text)
+  const digitsOnly = (decodedText || '').replace(/\D/g, '');
+  if (digitsOnly.length === 13 && validateIsbn13(digitsOnly)) {
+    // If it’s EAN-13 with 978/979, that is an ISBN-13
+    const maybeIsbn13 = ean13ToIsbn13(digitsOnly);
+    if (maybeIsbn13) return maybeIsbn13;
+    // Non-book EAN-13 — reject
+    return null;
+  }
+  if (digitsOnly.length === 10) {
+    // Could be ISBN-10 (no X captured), validate
+    if (validateIsbn10(digitsOnly)) return digitsOnly;
+  }
+
+  return null;
+}
+
+/* ------------------------------- Component -------------------------------- */
 export default function Scan({ setShowTabBar, setShowHeader }) {
   const navigate = useNavigate();
+
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isMobile, setIsMobile] = useState(true);
   const [showScanner, setShowScanner] = useState(false);
   const [scanning, setScanning] = useState(false);
-  const [foundBook, setFoundBook] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [cameraPermission, setCameraPermission] = useState('unknown'); // 'unknown', 'granted', 'denied'
+  const [cameraPermission, setCameraPermission] = useState('unknown'); // 'unknown' | 'granted' | 'denied'
+
   const scannerRef = useRef(null);
   const readerRef = useRef(null);
+  const handledRef = useRef(false); // prevent duplicate navigations
 
-  // Hide header and tab bar on scan page
+  // Hide header/tab bar while scanning
   useEffect(() => {
     setShowHeader?.(false);
     setShowTabBar?.(false);
-    
     return () => {
       setShowHeader?.(true);
       setShowTabBar?.(true);
@@ -55,241 +126,203 @@ export default function Scan({ setShowTabBar, setShowHeader }) {
     setIsMobile(isMobileDevice());
   }, []);
 
-  // Request camera permission
+  /* ----------------------- Camera permission request ---------------------- */
   const requestCameraPermission = async () => {
     try {
       setIsLoading(true);
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { 
-          facingMode: { ideal: "environment" } // Prefer back camera
-        } 
+      setError('');
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false,
       });
-      
-      // Stop the stream immediately - we just wanted to check permission
-      stream.getTracks().forEach(track => track.stop());
-      
+      // immediately stop; we just needed permission
+      stream.getTracks().forEach((t) => t.stop());
       setCameraPermission('granted');
       setShowScanner(true);
-      setError('');
-    } catch (err) {
-      console.error('Camera permission error:', err);
+    } catch (e) {
+      console.error('Camera permission error:', e);
       setCameraPermission('denied');
-      setError('Camera access denied. Please allow camera access to scan barcodes.');
+      setError(
+        'Camera access denied. Please allow camera access in your browser settings to scan barcodes.'
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Initialize scanner
+  /* --------------------------- Scanner bootstrap -------------------------- */
+  const scannerConfig = useMemo(
+    () => ({
+      fps: 12,
+      qrbox: { width: 280, height: 120 },
+      aspectRatio: 1.777778,
+      disableFlip: false,
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.QR_CODE,
+      ],
+      showTorchButtonIfSupported: true,
+      showZoomSliderIfSupported: true,
+    }),
+    []
+  );
+
   useEffect(() => {
-    let scanner;
-    
-    if (showScanner && cameraPermission === 'granted' && !scanning) {
-      const initScanner = async () => {
-        try {
-          setScanning(true);
-          setError('');
-          
-          // Clear any existing scanner
-          if (scannerRef.current) {
+    let scannerInstance;
+
+    async function init() {
+      if (!showScanner || cameraPermission !== 'granted' || scanning) return;
+      try {
+        setScanning(true);
+        setError('');
+
+        // Clear any previous scanner instance
+        if (scannerRef.current && typeof scannerRef.current.clear === 'function') {
+          try {
+            await scannerRef.current.clear();
+          } catch (e) {
+            // ignore
+          }
+        }
+
+        scannerInstance = new Html5QrcodeScanner('qr-reader', scannerConfig, /* verbose= */ false);
+        scannerRef.current = scannerInstance;
+
+        scannerInstance.render(
+          async (decodedText /*, decodedResult */) => {
+            // Debounce/prevent repeated fires
+            if (handledRef.current) return;
+            handledRef.current = true;
+
             try {
-              await scannerRef.current.clear();
-            } catch (e) {
-              console.warn('Scanner clear warning:', e);
+              const maybeIsbn = extractIsbnFromScan(decodedText);
+              if (!maybeIsbn) {
+                throw new Error(
+                  "That doesn't look like a book ISBN. Please scan the ISBN barcode on the back cover."
+                );
+              }
+
+              // Haptic feedback if supported
+              try {
+                if (navigator?.vibrate) navigator.vibrate(30);
+              } catch {}
+
+              setSuccess(`Found barcode: ${maybeIsbn}. Looking up book...`);
+              setIsLoading(true);
+
+              // Stop the scanner quickly to avoid duplicate scans
+              try {
+                await scannerRef.current?.clear();
+              } catch {}
+              setShowScanner(false);
+              setScanning(false);
+
+              // Try your backend endpoints (fastest-first style)
+              const calls = [
+                apiCall('/api/books/isbn/' + encodeURIComponent(maybeIsbn), { method: 'GET' }),
+                apiCall('/api/books/search', {
+                  method: 'GET',
+                  params: { q: `isbn:${maybeIsbn}` },
+                }),
+                apiCall('/api/books/search', { method: 'GET', params: { q: maybeIsbn } }),
+              ];
+
+              const results = await Promise.allSettled(calls);
+              let book = null;
+
+              for (const r of results) {
+                if (r.status === 'fulfilled') {
+                  const data = r.value?.data ?? {};
+                  if (data?.book) {
+                    book = data.book;
+                    break;
+                  } else if (Array.isArray(data?.items) && data.items.length > 0) {
+                    book = data.items[0];
+                    break;
+                  } else if (data?.title) {
+                    book = data;
+                    break;
+                  }
+                }
+              }
+
+              if (!book) {
+                throw new Error(
+                  `No book found for ISBN ${maybeIsbn}. Try another scan or use manual search.`
+                );
+              }
+
+              // Navigate immediately
+              navigate('/discover', {
+                state: { book, scannedISBN: maybeIsbn, fromScanner: true },
+                replace: false,
+              });
+            } catch (err) {
+              console.error('Lookup error:', err);
+              setError(err?.message || 'Failed to find book. Please try again.');
+              setSuccess('');
+              handledRef.current = false; // allow another attempt
+            } finally {
+              setIsLoading(false);
+            }
+          },
+          (scanError) => {
+            // Normal "no barcode" noise is expected; keep it quiet
+            const noisy = typeof scanError === 'string' ? scanError : scanError?.message || '';
+            if (noisy && !/QR code parse error|NotFoundException/i.test(noisy)) {
+              // Optional: console.debug('Scan tick:', noisy);
             }
           }
-
-          const config = {
-            fps: 10,
-            qrbox: { width: 280, height: 120 }, // Rectangular box better for barcodes
-            aspectRatio: 1.777778, // 16:9 aspect ratio
-            disableFlip: false,
-            experimentalFeatures: {
-              useBarCodeDetectorIfSupported: true // Use native barcode detection if available
-            },
-            formatsToSupport: [
-              Html5QrcodeScanner.SUPPORTED_FORMATS.EAN_13,
-              Html5QrcodeScanner.SUPPORTED_FORMATS.EAN_8,
-              Html5QrcodeScanner.SUPPORTED_FORMATS.CODE_128,
-              Html5QrcodeScanner.SUPPORTED_FORMATS.CODE_39,
-              Html5QrcodeScanner.SUPPORTED_FORMATS.QR_CODE
-            ],
-            showTorchButtonIfSupported: true, // Show flashlight if available
-            showZoomSliderIfSupported: true   // Show zoom if available
-          };
-
-          scanner = new Html5QrcodeScanner("qr-reader", config, false);
-          scannerRef.current = scanner;
-
-          scanner.render(
-            (decodedText, decodedResult) => {
-              console.log('📱 Barcode scanned:', decodedText);
-              handleScan(decodedText, decodedResult);
-            },
-            (error) => {
-              // Ignore scanning errors - just means no barcode found yet
-              if (!error.includes('No MultiFormat Readers')) {
-                console.log('Scanning...', error);
-              }
-            }
-          );
-
-        } catch (err) {
-          console.error('Scanner initialization error:', err);
-          setError('Failed to initialize camera scanner. Please try again.');
-          setScanning(false);
-        }
-      };
-
-      initScanner();
+        );
+      } catch (err) {
+        console.error('Scanner init error:', err);
+        setError('Failed to initialize the camera scanner. Please try again.');
+        setScanning(false);
+      }
     }
 
+    init();
+
+    // Cleanup on unmount
     return () => {
-      if (scanner) {
-        scanner.clear().catch(e => console.warn('Scanner cleanup warning:', e));
-      }
+      (async () => {
+        try {
+          await scannerInstance?.clear?.();
+        } catch {}
+      })();
       setScanning(false);
     };
-  }, [showScanner, cameraPermission]);
+  }, [showScanner, cameraPermission, scanning, scannerConfig]);
 
-  // Handle barcode scan
-  const handleScan = async (decodedText, decodedResult) => {
-    console.log('🔍 Processing scan result:', decodedText);
-    
-    // Stop scanner immediately to prevent multiple scans
-    if (scannerRef.current) {
-      try {
-        await scannerRef.current.clear();
-        setShowScanner(false);
-        setScanning(false);
-      } catch (e) {
-        console.warn('Scanner stop warning:', e);
-      }
-    }
-
-    setIsLoading(true);
-    setError('');
-
-    try {
-      // Validate and clean the scanned code
-      let isbn = decodedText.trim();
-      
-      // If it's not a valid ISBN, try to extract numbers
-      if (!isValidISBN(isbn)) {
-        const extractedNumbers = isbn.replace(/\D/g, '');
-        if (isValidISBN(extractedNumbers)) {
-          isbn = extractedNumbers;
-        } else {
-          throw new Error('Invalid barcode format. Please scan a book\'s ISBN barcode.');
-        }
-      }
-
-      console.log('📚 Looking up book with ISBN:', isbn);
-      setSuccess(`Found barcode: ${isbn}. Looking up book...`);
-
-      // Search for book using multiple methods
-      const searchPromises = [
-        // Method 1: Search by ISBN
-        apiCall(`/api/books/search`, {
-          method: 'GET',
-          params: { q: `isbn:${isbn}` }
-        }),
-        // Method 2: Direct ISBN search
-        apiCall(`/api/books/isbn/${isbn}`, {
-          method: 'GET'
-        }),
-        // Method 3: General search with the code
-        apiCall(`/api/books/search`, {
-          method: 'GET',
-          params: { q: isbn }
-        })
-      ];
-
-      const results = await Promise.allSettled(searchPromises);
-      
-      let book = null;
-      
-      // Find the first successful result with a book
-      for (const result of results) {
-        if (result.status === 'fulfilled') {
-          const data = result.value.data;
-          if (data.items && data.items.length > 0) {
-            book = data.items[0];
-            break;
-          } else if (data.book) {
-            book = data.book;
-            break;
-          } else if (data.title) {
-            book = data;
-            break;
-          }
-        }
-      }
-
-      if (book) {
-        console.log('✅ Book found:', book.title);
-        setFoundBook(book);
-        setSuccess(`Found: "${book.title}" by ${book.author || 'Unknown Author'}`);
-        
-        // Navigate to discover page after a short delay to show success message
-        setTimeout(() => {
-          navigate('/discover', { 
-            state: { 
-              book,
-              scannedISBN: isbn,
-              fromScanner: true
-            } 
-          });
-        }, 1500);
-        
-      } else {
-        throw new Error(`No book found for ISBN: ${isbn}. Try scanning another book or search manually.`);
-      }
-
-    } catch (err) {
-      console.error('❌ Book lookup error:', err);
-      setError(err.message || 'Failed to find book. Please try scanning again or search manually.');
-      setSuccess('');
-      
-      // Allow retry after error
-      setTimeout(() => {
-        setShowScanner(false);
-      }, 2000);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Restart scanner
+  /* -------------------------------- Actions -------------------------------- */
   const restartScanner = () => {
     setError('');
     setSuccess('');
-    setFoundBook(null);
-    setCameraPermission('unknown');
+    handledRef.current = false;
     setShowScanner(false);
     setScanning(false);
+    setCameraPermission('unknown');
   };
 
-  // Manual search fallback
-  const searchManually = () => {
-    navigate('/discover');
-  };
+  const searchManually = () => navigate('/discover');
 
-  // HTTPS check
+  /* ------------------------------- Guards/UI ------------------------------- */
   if (!isHttpsOrLocalhost()) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-gray-200 to-white text-black p-6">
         <div className="text-6xl mb-6">🔒</div>
         <h2 className="text-2xl font-bold mb-4 text-center">Secure Connection Required</h2>
-        <div className="text-orange-400 text-lg mb-4 text-center">
-          Camera scanning requires HTTPS for security.
-        </div>
-        <div className="text-gray-400 text-sm text-center mb-6">
-          Please use a secure (https://) connection to access the camera.
+        <div className="text-orange-400 text-lg mb-4 text-center">Camera scanning needs HTTPS.</div>
+        <div className="text-gray-500 text-sm text-center mb-6">
+          Open this page over <span className="font-semibold">https://</span> (or use localhost).
         </div>
         <button
           onClick={searchManually}
-          className="px-6 py-3 bg-orange-400 text-black rounded-full font-semibold hover:bg-orange-500 transition-all duration-200"
+          className="px-6 py-3 bg-orange-400 text-black rounded-full font-semibold hover:bg-orange-500 transition"
         >
           Search Books Instead
         </button>
@@ -297,21 +330,20 @@ export default function Scan({ setShowTabBar, setShowHeader }) {
     );
   }
 
-  // Camera support check
   if (!isCameraSupported()) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-gray-200 to-white text-black p-6">
         <div className="text-6xl mb-6">📱</div>
         <h2 className="text-2xl font-bold mb-4 text-center">Camera Not Available</h2>
         <div className="text-orange-400 text-lg mb-4 text-center">
-          Your browser doesn't support camera access.
+          Your browser doesn&apos;t support camera access.
         </div>
-        <div className="text-gray-400 text-sm text-center mb-6">
-          Please use a modern browser (Chrome, Safari, Edge, Firefox) on your mobile device.
+        <div className="text-gray-500 text-sm text-center mb-6">
+          Try a modern mobile browser (Chrome, Safari, Edge, Firefox).
         </div>
         <button
           onClick={searchManually}
-          className="px-6 py-3 bg-orange-400 text-black rounded-full font-semibold hover:bg-orange-500 transition-all duration-200"
+          className="px-6 py-3 bg-orange-400 text-black rounded-full font-semibold hover:bg-orange-500 transition"
         >
           Search Books Instead
         </button>
@@ -323,55 +355,44 @@ export default function Scan({ setShowTabBar, setShowHeader }) {
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-gray-200 to-white text-black p-4">
       {/* Header */}
       <div className="w-full text-center mb-6">
-        <div className="text-4xl mb-4">📚</div>
+        <div className="text-4xl mb-3">📚</div>
         <h2 className="text-2xl font-bold mb-2">Scan Book Barcode</h2>
-        <p className="text-gray-600 text-sm">
-          Point your camera at the ISBN barcode on the back of any book
-        </p>
+        <p className="text-gray-600 text-sm">Aim at the ISBN barcode on the back cover</p>
       </div>
 
-      {/* Status Messages */}
+      {/* Alerts */}
       {error && (
         <div className="w-full bg-red-900/50 border border-red-500 rounded-lg p-4 mb-4">
-          <div className="text-red-400 text-sm text-center">
-            ❌ {error}
-          </div>
+          <div className="text-red-300 text-sm text-center">❌ {error}</div>
         </div>
       )}
-
       {success && (
         <div className="w-full bg-green-900/50 border border-green-500 rounded-lg p-4 mb-4">
-          <div className="text-green-400 text-sm text-center">
-            ✅ {success}
-          </div>
+          <div className="text-green-300 text-sm text-center">✅ {success}</div>
         </div>
       )}
-
-      {/* Loading State */}
       {isLoading && (
         <div className="w-full bg-orange-900/50 border border-orange-500 rounded-lg p-4 mb-4">
-          <div className="text-orange-400 text-sm text-center flex items-center justify-center">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-400 mr-2"></div>
-            {foundBook ? 'Opening book details...' : 'Searching for book...'}
+          <div className="text-orange-300 text-sm text-center flex items-center justify-center">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-300 mr-2" />
+            Searching for book…
           </div>
         </div>
       )}
 
-      {/* Scanner Area */}
+      {/* Scanner region */}
       <div className="w-full">
         {!showScanner && cameraPermission !== 'granted' && (
           <div className="text-center">
             <div className="bg-gray-200 rounded-lg p-8 mb-4">
               <div className="text-6xl mb-4">📷</div>
-              <p className="text-gray-700 mb-6">
-                Allow camera access to scan book barcodes
-              </p>
+              <p className="text-gray-700 mb-6">Allow camera access to scan book barcodes</p>
               <button
                 onClick={requestCameraPermission}
                 disabled={isLoading}
-                className="w-full px-6 py-3 bg-orange-400 text-black rounded-full font-semibold hover:bg-orange-500 transition-all duration-200 disabled:opacity-50"
+                className="w-full px-6 py-3 bg-orange-400 text-black rounded-full font-semibold hover:bg-orange-500 transition disabled:opacity-50"
               >
-                {isLoading ? 'Requesting Access...' : 'Enable Camera'}
+                {isLoading ? 'Requesting Access…' : 'Enable Camera'}
               </button>
             </div>
           </div>
@@ -379,46 +400,38 @@ export default function Scan({ setShowTabBar, setShowHeader }) {
 
         {showScanner && (
           <div className="bg-gray-200 rounded-lg overflow-hidden mb-4">
-            <div 
-              id="qr-reader" 
-              ref={readerRef}
-              className="w-full"
-              style={{ minHeight: '300px' }}
-            />
+            <div id="qr-reader" ref={readerRef} className="w-full" style={{ minHeight: 300 }} />
           </div>
         )}
 
-        {/* Scanner Instructions */}
         {scanning && (
           <div className="text-center text-gray-600 text-sm mb-4">
-            <div className="mb-2">🎯 Center the barcode in the frame</div>
-            <div className="mb-2">📏 Keep steady and at arm's length</div>
+            <div className="mb-1">🎯 Center the barcode in the frame</div>
+            <div className="mb-1">📏 Hold steady about 15–20cm away</div>
             <div>💡 Ensure good lighting</div>
           </div>
         )}
       </div>
 
-      {/* Action Buttons */}
+      {/* Actions */}
       <div className="w-full space-y-3">
         {(error || cameraPermission === 'denied') && (
           <button
             onClick={restartScanner}
-            className="w-full px-6 py-3 bg-blue-600 text-white rounded-full font-semibold hover:bg-blue-700 transition-all duration-200"
+            className="w-full px-6 py-3 bg-blue-600 text-white rounded-full font-semibold hover:bg-blue-700 transition"
           >
             Try Again
           </button>
         )}
-
         <button
           onClick={searchManually}
-          className="w-full px-6 py-3 bg-gray-300 text-black rounded-full font-semibold hover:bg-gray-200 transition-all duration-200"
+          className="w-full px-6 py-3 bg-gray-300 text-black rounded-full font-semibold hover:bg-gray-200 transition"
         >
           Search Manually Instead
         </button>
-
         <button
           onClick={() => navigate(-1)}
-          className="w-full px-6 py-3 bg-transparent border border-gray-600 text-gray-700 rounded-full font-semibold hover:bg-gray-800 transition-all duration-200"
+          className="w-full px-6 py-3 bg-transparent border border-gray-600 text-gray-700 rounded-full font-semibold hover:bg-gray-800 transition"
         >
           Back
         </button>
@@ -427,15 +440,12 @@ export default function Scan({ setShowTabBar, setShowHeader }) {
       {/* Tips */}
       <div className="w-full mt-6 text-center">
         <details className="text-gray-800 text-xs">
-          <summary className="cursor-pointer hover:text-gray-600">
-            📋 Scanning Tips
-          </summary>
+          <summary className="cursor-pointer hover:text-gray-600">📋 Scanning Tips</summary>
           <div className="mt-2 space-y-1 text-left bg-gray-200/50 rounded p-3">
-            <div>• Look for the ISBN barcode (usually on the back cover)</div>
-            <div>• Hold your phone steady about 6-8 inches away</div>
-            <div>• Make sure there's enough light</div>
-            <div>• Try different angles if the first scan doesn't work</div>
-            <div>• The barcode should be clearly visible in the camera</div>
+            <div>• Find the ISBN barcode (usually on the back cover)</div>
+            <div>• Hold steady at ~6–8 inches / 15–20cm</div>
+            <div>• Ensure good lighting & avoid glare</div>
+            <div>• Try small angle adjustments if it won’t read</div>
           </div>
         </details>
       </div>
