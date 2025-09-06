@@ -20,6 +20,46 @@ const SEARCH_FILTERS = {
   rating: ['4+ Stars', '3+ Stars', '2+ Stars']
 };
 
+/* ---- Helpers ---- */
+
+// Try to request a smaller cover to reduce pixelation and bandwidth.
+function shrinkCover(url, target = 120) {
+  if (!url) return url;
+
+  try {
+    const u = new URL(url, window.location.origin);
+
+    // Google Books content
+    if (u.hostname.includes('books.google')) {
+      // zoom=1 is small; strip edge/curl noise
+      u.searchParams.set('img', '1');
+      u.searchParams.set('zoom', '1'); // smaller image
+      u.protocol = 'https:'; // force https
+      return u.toString();
+    }
+
+    // Open Library covers: .../b/id/ID-L.jpg -> use -M for medium or -S for small
+    if (u.hostname.includes('covers.openlibrary.org')) {
+      return u.toString().replace(/-L\.jpg$/i, '-M.jpg').replace(/-L\.png$/i, '-M.png');
+    }
+
+    // As a fallback, just return original (the container will keep it small)
+    return url;
+  } catch {
+    return url;
+  }
+}
+
+// Truncate utility
+function truncate(text, max = 140) {
+  if (!text) return '';
+  const clean = String(text).replace(/\s+/g, ' ').trim();
+  if (clean.length <= max) return clean;
+  const cut = clean.slice(0, max);
+  const last = cut.lastIndexOf(' ');
+  return `${cut.slice(0, last > 80 ? last : max)}…`;
+}
+
 export default function AdvancedSearch({ onBookSelect, onClose }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -76,6 +116,11 @@ export default function AdvancedSearch({ onBookSelect, onClose }) {
 
   // Debounced wrapper
   const debouncedSearch = useCallback(debounce(runSearch, 500), [runSearch]);
+
+  // Clean up debounce on unmount
+  useEffect(() => {
+    return () => debouncedSearch.cancel?.();
+  }, [debouncedSearch]);
 
   // Input change
   const handleSearchChange = (e) => {
@@ -163,7 +208,7 @@ export default function AdvancedSearch({ onBookSelect, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-start justify-center pt-[62px] bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-40 flex items-start justify-center pt-[62px] bg-black/60 backdrop-blur-sm"
       onClick={(e) => {
         // close on backdrop click
         if (e.target === e.currentTarget) onClose?.();
@@ -172,22 +217,11 @@ export default function AdvancedSearch({ onBookSelect, onClose }) {
       aria-modal="true"
       aria-label="Advanced book search"
     >
-      <div className="bg-white/90 supports-[backdrop-filter]:bg-white/80 backdrop-blur rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-5xl max-h-[calc(100vh-72px)] overflow-hidden mx-4">
+      <div className="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-3xl max-h-[calc(100vh-72px)] overflow-hidden mx-4">
         {/* Header */}
         <div className="p-4 border-b border-neutral-200">
           <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl text-white bg-gradient-to-br from-amber-400 to-orange-500 ring-1 ring-white/20 shadow">
-                {/* search icon */}
-                <svg viewBox="0 0 24 24" className="w-4.5 h-4.5 text-white/90" aria-hidden="true">
-                  <path d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z"
-                        className="stroke-current" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </span>
-              <h2 className="text-lg md:text-xl font-extrabold tracking-tight text-neutral-900">
-                Search Books Globally
-              </h2>
-            </div>
+            <h2 className="text-lg font-extrabold text-neutral-900 capitalize">Find your next story</h2>
             <button
               onClick={onClose}
               className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-white text-neutral-700 border border-neutral-200 hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-orange-300"
@@ -330,81 +364,104 @@ export default function AdvancedSearch({ onBookSelect, onClose }) {
           </div>
         )}
 
-        {/* Results */}
-        <div className="flex-1 overflow-y-auto max-h-[60vh]">
+        {/* Results — compact, mobile-friendly list (smaller thumbs to avoid pixelation) */}
+        <div className="flex-1 overflow-y-auto max-h-[70vh]">
           {results.length > 0 ? (
-            <div className="p-4">
-              {/* Grid of modern tiles (matches your BookRow/ContinueRow vibe) */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                {results.map((book, i) => (
+            <div className="divide-y divide-neutral-100">
+              {results.map((book, i) => {
+                const smallThumb = shrinkCover(book.coverImage, 120);
+                const teaser = truncate(book.description || book.subtitle || '', 150);
+
+                return (
                   <button
                     key={book.id || i}
                     onClick={() => onBookSelect?.(book)}
-                    className="group block w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 rounded-2xl"
+                    className="w-full text-left px-4 py-3 active:bg-neutral-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300"
                     title={`${book.title}${book.author ? ' — ' + book.author : ''}`}
                     aria-label={`Open ${book.title} by ${book.author || 'Unknown'}`}
                   >
-                    <div
-                      className="relative w-full rounded-2xl overflow-hidden shadow-md ring-1 ring-black/5 bg-neutral-200"
-                      style={{ paddingTop: '150%' }} // 2:3 aspect
-                    >
-                      {/* Cover */}
-                      <img
-                        src={book.coverImage || '/placeholder-cover.png'}
-                        alt={book.title}
-                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-                        onError={(e) => { e.currentTarget.src = '/placeholder-cover.png'; }}
-                        loading="lazy"
-                      />
+                    <div className="flex gap-3">
+                      {/* Small, crisp thumb (16:24 ratio) */}
+                      <div className="relative w-16 h-24 flex-shrink-0 rounded-lg overflow-hidden border border-neutral-200 bg-neutral-100">
+                        <img
+                          src={smallThumb || '/placeholder-cover.png'}
+                          alt={book.title}
+                          width={64}
+                          height={96}
+                          className="absolute inset-0 w-full h-full object-cover"
+                          onError={(e) => { e.currentTarget.src = '/placeholder-cover.png'; }}
+                          loading="lazy"
+                        />
+                        {/* tiny sheen */}
+                        <div className="pointer-events-none absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-white/10 to-transparent" />
+                      </div>
 
-                      {/* Gradient title band */}
-                      <div className="absolute inset-x-0 bottom-0 p-2 pt-10 bg-gradient-to-t from-black/75 via-black/30 to-transparent">
+                      {/* Copy */}
+                      <div className="min-w-0 flex-1">
                         <h3
-                          className="text-white text-[13px] font-semibold leading-tight line-clamp-2"
+                          className="text-[15px] font-extrabold leading-snug text-neutral-900 line-clamp-2"
                           dangerouslySetInnerHTML={{ __html: highlightText(book.title, query) }}
                         />
                         {book.author && (
                           <p
-                            className="text-white/80 text-[11px] line-clamp-1"
+                            className="text-[12px] text-neutral-600 mt-0.5 line-clamp-1 italic"
                             dangerouslySetInnerHTML={{ __html: highlightText(book.author, query) }}
                           />
                         )}
-                      </div>
 
-                      {/* sheen */}
-                      <div className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-gradient-to-b from-white/10 to-transparent" />
-                    </div>
-
-                    {/* Meta row */}
-                    <div className="mt-2 text-[11px] text-neutral-600 space-y-0.5">
-                      <div className="flex gap-2 flex-wrap">
-                        {book.publishedDate && <span className="px-2 py-0.5 rounded-full bg-neutral-100 ring-1 ring-black/5">Published: {book.publishedDate}</span>}
-                        {book.pageCount && <span className="px-2 py-0.5 rounded-full bg-neutral-100 ring-1 ring-black/5">{book.pageCount} pages</span>}
-                        {Array.isArray(book.categories) && book.categories.length > 0 && (
-                          <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 ring-1 ring-orange-200">
-                            {book.categories[0]}
-                          </span>
+                        {/* Teaser */}
+                        {teaser && (
+                          <p className="text-[12px] text-neutral-700 mt-1 line-clamp-2">
+                            {teaser}
+                          </p>
                         )}
-                      </div>
 
-                      {/* Source & confidence */}
-                      <div className="flex items-center justify-between mt-1">
-                        <span className="text-[10px] text-neutral-400 capitalize">
-                          Source: {book.source?.replace('_', ' ')}
-                        </span>
-                        {typeof book.confidence === 'number' && (
-                          <div className="flex items-center gap-1">
-                            <span className="text-[10px] text-neutral-400">Relevance</span>
-                            <div className="w-14 h-1.5 bg-neutral-200 rounded-full overflow-hidden">
-                              <div className="h-full bg-orange-500 rounded-full" style={{ width: `${book.confidence * 100}%` }} />
-                            </div>
+                        {/* Meta row */}
+                        <div className="mt-2 flex items-center gap-2 text-[11px] text-neutral-500">
+                          {book.publishedDate && (
+                            <span className="truncate">Published: {book.publishedDate}</span>
+                          )}
+                          {book.pageCount && (
+                            <>
+                              <span>·</span>
+                              <span>{book.pageCount} pages</span>
+                            </>
+                          )}
+                          {Array.isArray(book.categories) && book.categories.length > 0 && (
+                            <>
+                              <span>·</span>
+                              <span className="truncate">{book.categories[0]}</span>
+                            </>
+                          )}
+                          {/* CTA chevron */}
+                          <span className="ml-auto inline-flex items-center justify-center w-7 h-7 rounded-full bg-neutral-100 text-neutral-700">
+                            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                            </svg>
+                          </span>
+                        </div>
+
+                        {/* Source & confidence */}
+                        {(book.source || typeof book.confidence === 'number') && (
+                          <div className="mt-1 flex items-center justify-between">
+                            <span className="text-[10px] text-neutral-400 capitalize">
+                              {book.source ? `Source: ${book.source.replace('_', ' ')}` : '\u00A0'}
+                            </span>
+                            {typeof book.confidence === 'number' && (
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] text-neutral-400">Relevance</span>
+                                <div className="w-14 h-1.5 bg-neutral-200 rounded-full overflow-hidden">
+                                  <div className="h-full bg-orange-500 rounded-full" style={{ width: `${Math.min(100, Math.max(0, book.confidence * 100))}%` }} />
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
                     </div>
                   </button>
-                ))}
-              </div>
+                );
+              })}
             </div>
           ) : (
             !loading && query && (
