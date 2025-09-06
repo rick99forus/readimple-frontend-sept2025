@@ -97,6 +97,8 @@ function extractIsbnFromScan(decodedText) {
 }
 
 /* ------------------------------- Component -------------------------------- */
+const CAMERA_PERMISSION_KEY = 'camera_permission';
+
 export default function Scan({ setShowTabBar, setShowHeader }) {
   const navigate = useNavigate();
 
@@ -106,7 +108,9 @@ export default function Scan({ setShowTabBar, setShowHeader }) {
   const [showScanner, setShowScanner] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [cameraPermission, setCameraPermission] = useState('unknown'); // 'unknown' | 'granted' | 'denied'
+  const [cameraPermission, setCameraPermission] = useState(() => {
+    return localStorage.getItem(CAMERA_PERMISSION_KEY) || 'unknown';
+  });
 
   const scannerRef = useRef(null);
   const readerRef = useRef(null);
@@ -126,6 +130,12 @@ export default function Scan({ setShowTabBar, setShowHeader }) {
     setIsMobile(isMobileDevice());
   }, []);
 
+  useEffect(() => {
+    if (cameraPermission === 'granted') {
+      setShowScanner(true);
+    }
+  }, [cameraPermission]);
+
   /* ----------------------- Camera permission request ---------------------- */
   const requestCameraPermission = async () => {
     try {
@@ -138,10 +148,12 @@ export default function Scan({ setShowTabBar, setShowHeader }) {
       // immediately stop; we just needed permission
       stream.getTracks().forEach((t) => t.stop());
       setCameraPermission('granted');
+      localStorage.setItem(CAMERA_PERMISSION_KEY, 'granted');
       setShowScanner(true);
     } catch (e) {
       console.error('Camera permission error:', e);
       setCameraPermission('denied');
+      localStorage.setItem(CAMERA_PERMISSION_KEY, 'denied');
       setError(
         'Camera access denied. Please allow camera access in your browser settings to scan barcodes.'
       );
@@ -305,7 +317,7 @@ export default function Scan({ setShowTabBar, setShowHeader }) {
     handledRef.current = false;
     setShowScanner(false);
     setScanning(false);
-    setCameraPermission('unknown');
+    setCameraPermission(localStorage.getItem(CAMERA_PERMISSION_KEY) || 'unknown');
   };
 
   const searchManually = () => navigate('/discover');

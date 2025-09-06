@@ -15,7 +15,6 @@ const ALL_GENRES = [
   'spirituality', 'business', 'graphic novel', 'dystopian'
 ];
 
-// Genre gradients
 const GENRE_GRADIENTS = {
   fiction: 'linear-gradient(210deg, #fffbe6 40%, #ffffff 100%)',
   fantasy: 'linear-gradient(210deg, #f3e8ff 40%, #ffffff 100%)',
@@ -54,13 +53,12 @@ const Home = forwardRef((props, ref) => {
   const [browseRows, setBrowseRows] = useState([]);
   const navigate = useNavigate();
 
-  // Fetch user's selected genres
+  // Fetch user's selected genres (always fresh)
   useEffect(() => {
     async function fetchGenresAndBooks() {
       setLoadingGenres(true);
       setApiError(null);
       try {
-        // Get preferred genres from localStorage or fallback
         let genres = [];
         try {
           genres = JSON.parse(localStorage.getItem('preferredGenres') || '[]');
@@ -68,8 +66,6 @@ const Home = forwardRef((props, ref) => {
           genres = [];
         }
         if (!genres.length) genres = ['fiction', 'history', 'self-help'];
-
-        // Fetch all genres and their books in one batch call
         const res = await apiCall('/api/books/home-batch', {
           method: 'GET',
           params: { genres: genres.map(g => g.toLowerCase()).join(',') }
@@ -85,7 +81,7 @@ const Home = forwardRef((props, ref) => {
     fetchGenresAndBooks();
   }, []);
 
-  // Continue reading
+  // Continue reading (cached)
   useEffect(() => {
     setLoadingContinue(true);
     fetchWithCache(`/api/books/me/reading`)
@@ -94,7 +90,7 @@ const Home = forwardRef((props, ref) => {
       .finally(() => setLoadingContinue(false));
   }, []);
 
-  // Fetch new releases for BookGrid
+  // Fetch new releases for BookGrid (always fresh)
   useEffect(() => {
     setLoadingNewReleases(true);
     apiCall('/api/books/new-releases', { method: 'GET' })
@@ -103,7 +99,7 @@ const Home = forwardRef((props, ref) => {
       .finally(() => setLoadingNewReleases(false));
   }, []);
 
-  // Fetch genres not selected by user for "Browse more books"
+  // Fetch genres not selected by user for "Browse more books" (always fresh)
   useEffect(() => {
     let userGenres = [];
     try {
@@ -112,12 +108,8 @@ const Home = forwardRef((props, ref) => {
       userGenres = [];
     }
     if (!userGenres.length) userGenres = ['fiction', 'history', 'self-help'];
-
-    // Pick 3 genres not selected by user
     const notSelected = ALL_GENRES.filter(g => !userGenres.includes(g));
     const randomGenres = notSelected.sort(() => 0.5 - Math.random()).slice(0, 3);
-
-    // Fetch books for those genres
     apiCall('/api/books/home-batch', {
       method: 'GET',
       params: { genres: randomGenres.join(',') }
@@ -126,6 +118,7 @@ const Home = forwardRef((props, ref) => {
       .catch(() => setBrowseRows([]));
   }, []);
 
+  // Pass selected book to Discover
   const handleBookClick = (book) => {
     navigate('/discover', { state: { book } });
   };
@@ -160,10 +153,7 @@ const Home = forwardRef((props, ref) => {
           <div className="w-full text-center py-8 text-gray-400">Loading genres...</div>
         ) : (
           genreRows.map(({ genre, books }) => (
-            <div
-              key={genre}
-              className="w-full"
-            >
+            <div key={genre} className="w-full">
               <Section
                 id={`genre-${genre}`}
                 title={genre.charAt(0).toUpperCase() + genre.slice(1)}
@@ -191,7 +181,6 @@ const Home = forwardRef((props, ref) => {
           )}
         </Section>
         <Section id="browse" title="Browse more books" show>
-          {/* BookRows for 3 genres not selected by user */}
           {browseRows.map(({ genre, books }) => (
             <div key={genre} className="w-full mb-6">
               <Section className='w-full px-0'

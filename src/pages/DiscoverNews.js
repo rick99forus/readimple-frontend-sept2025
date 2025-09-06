@@ -283,8 +283,12 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
           seen.add(b.id);
         }
       }
-      setBooks(deduped.slice(0, BOOKS_TO_SHOW));
-      setSelectedBook(deduped.length ? deduped[0] : null);
+      setBooks(prev => {
+        const lead = selectedBook || deduped[0];
+        const filtered = deduped.filter(b => b.id !== lead.id);
+        return [lead, ...filtered].slice(0, BOOKS_TO_SHOW);
+      });
+      setSelectedBook(prev => prev || (deduped.length ? deduped[0] : null));
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e) {
       console.error('Failed to fetch books:', e);
@@ -435,8 +439,14 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
   // Handle navigation-passed book
   useEffect(() => {
     if (location.state?.book) {
-      setSelectedBook(location.state.book);
-      setOpenSheet(true);
+      const navBook = location.state.book;
+      setSelectedBook(navBook);
+      setBooks(prevBooks => {
+        // Remove any duplicate of navBook from the list
+        const filtered = prevBooks.filter(b => b.id !== navBook.id);
+        // Place navBook at the front
+        return [navBook, ...filtered].slice(0, BOOKS_TO_SHOW);
+      });
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);

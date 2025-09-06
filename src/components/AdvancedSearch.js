@@ -115,6 +115,7 @@ export default function AdvancedSearch({ onBookSelect, onClose }) {
   );
 
   // Debounced wrapper
+   // eslint-disable-next-line 
   const debouncedSearch = useCallback(debounce(runSearch, 500), [runSearch]);
 
   // Clean up debounce on unmount
@@ -208,7 +209,7 @@ export default function AdvancedSearch({ onBookSelect, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-start justify-center pt-[62px] bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={(e) => {
         // close on backdrop click
         if (e.target === e.currentTarget) onClose?.();
@@ -217,7 +218,7 @@ export default function AdvancedSearch({ onBookSelect, onClose }) {
       aria-modal="true"
       aria-label="Advanced book search"
     >
-      <div className="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-3xl max-h-[calc(100vh-72px)] overflow-hidden mx-4">
+      <div className="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-3xl overflow-hidden mx-4">
         {/* Header */}
         <div className="p-4 border-b border-neutral-200">
           <div className="flex items-center justify-between mb-3">
