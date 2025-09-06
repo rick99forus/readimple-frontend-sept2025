@@ -474,12 +474,12 @@ export default function Scan({ setShowTabBar, setShowHeader }) {
 
   /* ------------------------------ Navigation ------------------------------ */
 
-  const confirmAndGo = (book) => {
+  function confirmAndGo(book) {
     navigate('/discover', {
-      state: { book, scannedISBN: book.isbn_13 || null, fromScanner: true },
+      state: { book, scannedISBN: book.isbn_13 || book.isbn || null, fromScanner: true },
       replace: false,
     });
-  };
+  }
 
   const resumeScan = async () => {
     setConfirmOpen(false);
