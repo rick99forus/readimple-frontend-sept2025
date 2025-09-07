@@ -475,8 +475,9 @@ export default function Scan({ setShowTabBar, setShowHeader }) {
   /* ------------------------------ Navigation ------------------------------ */
 
   function confirmAndGo(book) {
+    // Pass the selected book to Discover page as lead book (same as Home.js)
     navigate('/discover', {
-      state: { book, scannedISBN: book.isbn_13 || book.isbn || null, fromScanner: true },
+      state: { book }, // Only pass the book object
       replace: false,
     });
   }

@@ -3,8 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { apiCall } from '../utils/api';
 import { getWorldCatLink } from '../utils/worldcatLink';
 import { reverseGeocode } from '../utils/reverseGeocode';
-import { BottomSheet } from 'react-spring-bottom-sheet';
-import 'react-spring-bottom-sheet/dist/style.css';
+import BottomSheet from '../components/BottomSheet';
 import { MERCHANTS, AVATARS, GENRE_GRADIENTS, GENRE_ACCENTS } from '../constants/appConstants';
 import dayjs from 'dayjs'; // npm install dayjs
 
@@ -985,562 +984,457 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
 
         </div>
 
-        {/* Bottom Sheet */}
-        <BottomSheet
-          open={openSheet}
-          onDismiss={() => setOpenSheet(false)}
-          snapPoints={({ maxHeight, minHeight }) => [maxHeight * 0.9, maxHeight * 0.9, minHeight * 0.9]}
-          style={{ zIndex: 10, position: 'fixed', left: 0, right: 0, bottom: 0, background: 'rgb(250, 250, 250)' }}
-        >
-          {/* Transition overlay */}
-          {isBookTransitioning && (
-            <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center transition-all duration-300" style={{ zIndex: 1000 }}>
-              <div className="flex flex-col items-center space-y-4">
-                <div className="relative">
-                  <div className="w-12 h-12 border-4 border-orange-200 rounded-full animate-spin border-t-orange-400" />
-                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-                    <div className="w-3 h-3 bg-orange-400 rounded-full animate-pulse" />
-                  </div>
+        
+      {/* Bottom sheet */}
+      <BottomSheet
+        open={openSheet}
+        onClose={() => setOpenSheet(false)}
+        title={selectedBook?.title || 'Details'}
+      >
+        {/* Transition overlay */}
+        {isBookTransitioning && (
+          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center transition-all duration-300" style={{ zIndex: 1000 }}>
+            <div className="flex flex-col items-center space-y-4">
+              <div className="relative">
+                <div className="w-12 h-12 border-4 border-orange-200 rounded-full animate-spin border-t-orange-400" />
+                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+                  <div className="w-3 h-3 bg-orange-400 rounded-full animate-pulse" />
                 </div>
-                <div className="text-orange-600 font-medium text-sm">Loading book details...</div>
               </div>
-            </div>
-          )}
-
-          <div style={{ maxHeight: '100vh', overflowY: 'auto', position: 'relative' }}>
-            <div className="relative w-full h-full bg-white">
-
-              {/* Main content */}
-              <div
-                ref={bottomSheetContentRef}
-                className="relative z-10"
-                style={{
-                  paddingBottom: '88px',
-                  transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-                  opacity: isBookTransitioning ? 0.7 : 1,
-                  filter: isBookTransitioning ? 'blur(2px)' : 'blur(0px)',
-                  transform: isBookTransitioning ? 'translateY(10px) scale(0.98)' : 'translateY(0px) scale(1)',
-                }}
-              >
-                {/* Book header */}
-                <div className="text-center pt-4 px-4 flex justify-center items-center gap-4">
-                  <img
-                    src={selectedBook?.coverImage || '/default-cover.png'}
-                    alt={selectedBook?.title || 'Selected Book'}
-                    className="w-32 h-48 mb-2 rounded-lg shadow-lg mx-0"
-                  />
-                  <div className="min-w-0">
-                    <h1 className="text-2xl font-bold text-neutral-900 line-clamp-2">
-                      {selectedBook?.title || 'Select a book'}
-                    </h1>
-                    <h2 className="text-sm text-neutral-700 line-clamp-3 italic">
-                      by {selectedBook?.author || 'Unknown Author'}
-                    </h2>
-                    <h2 className="text-xs text-neutral-500 mt-1 capitalize">
-                      {selectedBook?._genre || selectedBook?.genres?.[0] || 'Genre Unknown'}
-                    </h2>
-                  </div>
-                </div>
-
-                {/* Summary */}
-                <div className="gap-4 px-6 py-4 border-b-2 border-neutral-100 border-solid">
-                  <div className="font-bold mb-1 text-lg" style={{ color: '#f97316' }}>
-                    Book Summary
-                  </div>
-                  {summarySections.length === 0 ? (
-                    <div className="text-base text-neutral-400 font-medium mb-2">Loading summary...</div>
-                  ) : (
-                    summarySections.map((section, idx) => (
-                      <div key={`${section.subtitle || 'section'}-${idx}`} className="mb-4">
-                        <div className="font-bold text-black text-lg mb-1">{section.subtitle}</div>
-                        <div className="text-base text-neutral-900">{section.content}</div>
-                      </div>
-                    ))
-                  )}
-                  <div className="mt-4 text-xs text-gray-500 italic">
-                    <span className="font-semibold text-orange-500">AI Notice:</span> Some summaries and insights in this app are generated by artificial intelligence.
-                  </div>
-                </div>
-
-                {/* Book details */}
-                {selectedBook && (
-                  <div className="gap-4 px-6 py-4 border-b-2 border-neutral-100 border-solid">
-                    <div className="font-bold mb-1 text-lg" style={{ color: '#f97316' }}>
-                      Book Details
-                    </div>
-                    <div className="text-base text-neutral-700 mb-2">
-                      <div><span className="font-semibold">Publisher:</span> {selectedBook.publisher || 'Unknown'}</div>
-                      <div><span className="font-semibold">Published:</span> {selectedBook.publishedDate || 'Unknown'}</div>
-                      <div><span className="font-semibold">Pages:</span> {selectedBook.pageCount || 'N/A'}</div>
-                      <div><span className="font-semibold">ISBN-13:</span> {selectedBook.isbn_13 || selectedBook.isbn13 || selectedBook.isbn || 'N/A'}</div>
-                      <div><span className="font-semibold">ISBN-10:</span> {selectedBook.isbn_10 || selectedBook.isbn10 || 'N/A'}</div>
-                      <div><span className="font-semibold">Categories:</span> {(selectedBook.categories && selectedBook.categories.join(', ')) || selectedBook._genre || 'N/A'}</div>
-                      <div><span className="font-semibold">Language:</span> {selectedBook.language || 'N/A'}</div>
-                      {selectedBook.averageRating && (
-                        <div><span className="font-semibold">Rating:</span> {selectedBook.averageRating} / 5 ({selectedBook.ratingsCount || 0} ratings)</div>
-                      )}
-                      {selectedBook.previewLink && (
-                        <div><a href={selectedBook.previewLink} target="_blank" rel="noopener noreferrer" className="text-orange-500 underline">Google Books Preview</a></div>
-                      )}
-                      {selectedBook.infoLink && (
-                        <div><a href={selectedBook.infoLink} target="_blank" rel="noopener noreferrer" className="text-orange-500 underline">More Info</a></div>
-                      )}
-                      {bookLinks?.worldCatLink && (
-                        <div><a href={bookLinks.worldCatLink} target="_blank" rel="noopener noreferrer" className="text-orange-500 underline">WorldCat Libraries</a></div>
-                      )}
-                      {openLibraryAvailability?.records && (
-                        <div className="text-xs text-neutral-500 mt-2">Open Library availability fetched — availability may vary by region.</div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Recommended Books */}
-                <div className="gap-4 px-6 py-4 overflow-x-auto">
-                  <div className="font-bold mb-2 text-lg" style={{ color: '#f97316' }}>Recommended Books</div>
-                  <div className="flex gap-4 overflow-x-auto pb-2">
-                    {books
-                      .filter(book => book.id !== selectedBook?.id)
-                      .map(book => (
-                        <div
-                          key={book.id}
-                          className={`flex-shrink-0 w-32 cursor-pointer rounded-lg p-2 shadow transition-all duration-200 flex flex-col items-center ${isChangingBook ? 'opacity-50 pointer-events-none' : 'hover:bg-neutral-200 hover:scale-105'} bg-neutral-100`}
-                          style={{ minWidth: 128 }}
-                          onClick={() => handleBookChange(book, false)}
-                        >
-                          <img src={book.coverImage} alt={book.title} className="w-24 h-36 object-cover rounded shadow mb-2 transition-transform duration-200" />
-                          <div className="font-bold text-black text-sm text-center truncate w-full">{book.title}</div>
-                          <div className="text-neutral-400 text-xs text-center truncate w-full">{book.author}</div>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-
-                {/* Popular Quotes */}
-                <div className="gap-4 px-6 py-4">
-                  <div className="font-bold mb-1 text-lg" style={{ color: '#f97316' }}>Popular Quotes</div>
-                  <div className="text-base text-neutral-500 mb-2 italic" style={{ whiteSpace: 'pre-line' }}>
-                    {bookQuotes || 'No quotes found.'}
-                  </div>
-                </div>
-              </div>     
+              <div className="text-orange-600 font-medium text-sm">Loading book details...</div>
             </div>
           </div>
-          {/* Buy / Borrow / Like actions (modern) + Modal */}
-          <div className="px-6 py-4">
-            <div className="fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-sm border-t border-neutral-200 z-20 px-6 py-3 flex flex-col items-stretch" style={{ boxShadow: '0 -2px 10px rgba(0,0,0,0.1)' }}>        
-              {/* Like / Interested chip */}
-              <div className="mb-3 fixed bottom-20 right-4 w-fit ">
-                
+        )}
+
+        <div style={{ maxHeight: '100vh', overflowY: 'auto', position: 'relative' }}>
+          <div className="relative w-full h-full bg-white">
+            {/* Main content */}
+            <div
+              ref={bottomSheetContentRef}
+              className="relative z-10"
+              style={{
+                paddingBottom: '88px',
+                transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+                opacity: isBookTransitioning ? 0.7 : 1,
+                filter: isBookTransitioning ? 'blur(2px)' : 'blur(0px)',
+                transform: isBookTransitioning ? 'translateY(10px) scale(0.98)' : 'translateY(0px) scale(1)',
+              }}
+            >
+              {/* Book header */}
+              <div className="text-center pt-4 px-4 flex justify-center items-center gap-4">
+                <img
+                  src={selectedBook?.coverImage || '/default-cover.png'}
+                  alt={selectedBook?.title || 'Selected Book'}
+                  className="w-32 h-48 mb-2 rounded-lg shadow-lg mx-0"
+                />
+                <div className="min-w-0">
+                  <h1 className="text-2xl font-bold text-neutral-900 line-clamp-2">
+                    {selectedBook?.title || 'Select a book'}
+                  </h1>
+                  <h2 className="text-sm text-neutral-700 line-clamp-3 italic">
+                    by {selectedBook?.author || 'Unknown Author'}
+                  </h2>
+                  <h2 className="text-xs text-neutral-500 mt-1 capitalize">
+                    {selectedBook?._genre || selectedBook?.genres?.[0] || 'Genre Unknown'}
+                  </h2>
+                </div>
               </div>
 
-              {/* Buy / Borrow buttons */}
-              <div className="flex gap-2 justify-center">
-                {/* BUY */}
-                <button
-                  className="group relative flex-1 px-4 py-3 rounded-2xl text-left shadow-md text-white
-                            bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600
-                            focus:outline-none focus:ring-2 focus:ring-orange-300 active:scale-[0.99] transition-all"
-                  onClick={() => {
-                    setShowBuyBorrowModal('buy');
-                    requestLocation();
-                  }}
-                  aria-label="Buy (stores & online)"
-                >
-                  <span className="flex items-center gap-3">
-                    {/* Icon bubble */}
-                    <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-white/15 ring-1 ring-white/20 shadow-sm">
-                      {/* Shopping bag icon */}
-                      <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden="true">
-                        <path d="M6 7h12l-1.2 12.3A2 2 0 0 1 14.8 21H9.2a2 2 0 0 1-2-1.7L6 7Z" className="fill-white/90" />
-                        <path d="M9 9V6a3 3 0 0 1 6 0v3" className="stroke-white/90" strokeWidth="1.6" fill="none" strokeLinecap="round" />
-                      </svg>
-                    </span>
-
-                    {/* Text */}
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold leading-5">Buy</span>
-                      <span className="block text-[11px] leading-4 opacity-90">Stores &amp; online</span>
-                    </span>
-
-                    {/* Chevron */}
-                    <span className="ml-auto opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition">
-                      <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden="true">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" className="stroke-white/90" strokeWidth="2" fill="none" />
-                      </svg>
-                    </span>
-                  </span>
-                </button>
-
-                {/* BORROW 
-                <button
-                  className="group relative flex-1 px-4 py-3 rounded-2xl text-left shadow-md text-white
-                            bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700
-                            focus:outline-none focus:ring-2 focus:ring-indigo-300 active:scale-[0.99] transition-all"
-                  onClick={() => {
-                    setShowBuyBorrowModal('borrow');
-                    requestLocation();
-                  }}
-                  aria-label="Borrow from libraries nearby"
-                >
-                  <span className="flex items-center gap-3">
-                    
-                    <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-white/15 ring-1 ring-white/20 shadow-sm">
-                      
-                      <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden="true">
-                        <path d="M12 6c-2.2-1.2-4.6-1.2-7 0v11.5c2.4-1.2 4.8-1.2 7 0m0-11.5c2.2-1.2 4.6-1.2 7 0v11.5c-2.4-1.2-4.8-1.2-7 0" className="stroke-white/90" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </span>
-
-                    
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold leading-5">Borrow</span>
-                      <span className="block text-[11px] leading-4 opacity-90">Libraries near you</span>
-                    </span>
-
-                    
-                    <span className="ml-auto opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition">
-                      <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden="true">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" className="stroke-white/90" strokeWidth="2" fill="none" />
-                      </svg>
-                    </span>
-                  </span>
-                </button>
-                */}
-                {/* LIKE */}
-                <button
-                  className={`group w-fit h-fit self-center rounded-full text-sm font-semibold transition-all duration-200 flex disabled:opacity-60
-                    ${isLiked
-                      ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
-                      : 'bg-neutral-50 text-neutral-700 border-neutral-200 hover:bg-neutral-100'}`}
-                  onClick={handleAddToList}
-                  disabled={isChangingBook}
-                  aria-pressed={isLiked}
-                  title={isLiked ? 'Marked as interested' : 'Mark as interested'}
-                >
-                  {/* Heart icon */}
-                  <span className="relative inline-flex">
-                    {isLiked ? (
-                      <svg className="w-6 h-6 shrink-0 transition-transform duration-500 group-active:scale-95" viewBox="0 0 20 20" aria-hidden="true">
-                        <path d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" className="fill-rose-600" />
-                      </svg>
-                    ) : (
-                      <svg className="w-6 h-6 shrink-0 transition-transform duration-500 group-hover:scale-105" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.564 1.118-4.312 2.723-.748-1.605-2.377-2.723-4.313-2.723C5.099 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" className="stroke-current" strokeWidth="1.8" />
-                      </svg>
-                    )}
-                    
-                  </span>
-                </button>
+              {/* Summary */}
+              <div className="gap-4 px-6 py-4 border-b-2 border-neutral-100 border-solid">
+                <div className="font-bold mb-1 text-lg" style={{ color: '#f97316' }}>
+                  Book Summary
+                </div>
+                {summarySections.length === 0 ? (
+                  <div className="text-base text-neutral-400 font-medium mb-2">Loading summary...</div>
+                ) : (
+                  summarySections.map((section, idx) => (
+                    <div key={`${section.subtitle || 'section'}-${idx}`} className="mb-4">
+                      <div className="font-bold text-black text-lg mb-1">{section.subtitle}</div>
+                      <div className="text-base text-neutral-900">{section.content}</div>
+                    </div>
+                  ))
+                )}
+                <div className="mt-4 text-xs text-gray-500 italic">
+                  <span className="font-semibold text-orange-500">AI Notice:</span> Some summaries and insights in this app are generated by artificial intelligence.
+                </div>
               </div>
-            </div>       
-            {/* ==== MODAL (Buy or Borrow) ==== */}
-            {(showBuyBorrowModal === 'buy' || showBuyBorrowModal === 'borrow') && (
-              <div
-                className="fixed inset-0 z-[10] flex items-end sm:items-center justify-center"
-                onClick={() => setShowBuyBorrowModal(null)}
-                role="dialog"
-                aria-modal="true"
-              >
-                {/* Backdrop */}
-                <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" />
 
-                {/* Sheet */}
-                <div
-                  className="relative w-full bg-white shadow-2xl overflow-hidden flex flex-col pb-[85px]"
-                  style={{ minHeight: 'calc(100vh - 56px)', maxHeight: 'calc(100vh - 56px)' }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {/* Grab handle + Close */}
-                  <div className="relative">
-                    
-                    <button
-                      className="absolute right-3 top-3 h-10 w-10 rounded-full bg-white/80 shadow ring-1 ring-black/5 text-neutral-700 text-2xl leading-none flex items-center justify-center duration-300 hover:bg-white focus:outline-none focus:ring-2 focus:ring-orange-300"
-                      style={{ lineHeight: '1rem' }}
-                      onClick={() => setShowBuyBorrowModal(null)}
-                      aria-label="Close"
-                    >
-                      ×
-                    </button>
+              {/* Book details */}
+              {selectedBook && (
+                <div className="gap-4 px-6 py-4 border-b-2 border-neutral-100 border-solid">
+                  <div className="font-bold mb-1 text-lg" style={{ color: '#f97316' }}>
+                    Book Details
                   </div>
+                  <div className="text-base text-neutral-700 mb-2">
+                    <div><span className="font-semibold">Publisher:</span> {selectedBook.publisher || 'Unknown'}</div>
+                    <div><span className="font-semibold">Published:</span> {selectedBook.publishedDate || 'Unknown'}</div>
+                    <div><span className="font-semibold">Pages:</span> {selectedBook.pageCount || 'N/A'}</div>
+                    <div><span className="font-semibold">ISBN-13:</span> {selectedBook.isbn_13 || selectedBook.isbn13 || selectedBook.isbn || 'N/A'}</div>
+                    <div><span className="font-semibold">ISBN-10:</span> {selectedBook.isbn_10 || selectedBook.isbn10 || 'N/A'}</div>
+                    <div><span className="font-semibold">Categories:</span> {(selectedBook.categories && selectedBook.categories.join(', ')) || selectedBook._genre || 'N/A'}</div>
+                    <div><span className="font-semibold">Language:</span> {selectedBook.language || 'N/A'}</div>
+                    {selectedBook.averageRating && (
+                      <div><span className="font-semibold">Rating:</span> {selectedBook.averageRating} / 5 ({selectedBook.ratingsCount || 0} ratings)</div>
+                    )}
+                    {selectedBook.previewLink && (
+                      <div><a href={selectedBook.previewLink} target="_blank" rel="noopener noreferrer" className="text-orange-500 underline">Google Books Preview</a></div>
+                    )}
+                    {selectedBook.infoLink && (
+                      <div><a href={selectedBook.infoLink} target="_blank" rel="noopener noreferrer" className="text-orange-500 underline">More Info</a></div>
+                    )}
+                    {bookLinks?.worldCatLink && (
+                      <div><a href={bookLinks.worldCatLink} target="_blank" rel="noopener noreferrer" className="text-orange-500 underline">WorldCat Libraries</a></div>
+                    )}
+                    {openLibraryAvailability?.records && (
+                      <div className="text-xs text-neutral-500 mt-2">Open Library availability fetched — availability may vary by region.</div>
+                    )}
+                  </div>
+                </div>
+              )}
 
-                  {/* BUY CONTENT */}
-                  {showBuyBorrowModal === 'buy' && (
+              {/* Recommended */}
+              <div className="gap-4 px-6 py-4 overflow-x-auto">
+                <div className="font-bold mb-2 text-lg" style={{ color: '#f97316' }}>Recommended Books</div>
+                <div className="flex gap-4 overflow-x-auto pb-2">
+                  {books
+                    .filter(book => book.id !== selectedBook?.id)
+                    .map(book => (
+                      <div
+                        key={book.id}
+                        className={`flex-shrink-0 w-32 cursor-pointer rounded-lg p-2 shadow transition-all duration-200 flex flex-col items-center ${isBookTransitioning ? 'opacity-50 pointer-events-none' : 'hover:bg-neutral-200 hover:scale-105'} bg-neutral-100`}
+                        style={{ minWidth: 128 }}
+                        onClick={() => handleBookChange(book, false)}
+                      >
+                        <img src={book.coverImage} alt={book.title} className="w-24 h-36 object-cover rounded shadow mb-2 transition-transform duration-200" />
+                        <div className="font-bold text-black text-sm text-center truncate w-full">{book.title}</div>
+                        <div className="text-neutral-400 text-xs text-center truncate w-full">{book.author}</div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              {/* Quotes */}
+              <div className="gap-4 px-6 py-4">
+                <div className="font-bold mb-1 text-lg" style={{ color: '#f97316' }}>Popular Quotes</div>
+                <div className="text-base text-neutral-500 mb-2 italic" style={{ whiteSpace: 'pre-line' }}>
+                  {bookQuotes || 'No quotes found.'}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </BottomSheet>
+
+      {/* Buy/Borrow BottomSheet Modal */}
+      <BottomSheet
+        open={showBuyBorrowModal === 'buy' || showBuyBorrowModal === 'borrow'}
+        onClose={() => setShowBuyBorrowModal(null)}
+        title={
+          showBuyBorrowModal === 'buy'
+            ? (selectedBook?.title ? `Buy "${selectedBook.title}"` : 'Buy')
+            : showBuyBorrowModal === 'borrow'
+            ? (selectedBook?.title ? `Borrow "${selectedBook.title}"` : 'Borrow')
+            : 'Details'
+        }
+      >
+        {/* BUY CONTENT */}
+        {showBuyBorrowModal === 'buy' && (
+          <>
+            <div className='flex justify-start pt-4 items-start'>
+              <div className="px-4 pt-2 pb-1 max-w-[16rem] min-w-0">
+                <h2 className="text-lg font-bold text-neutral-900">Buy "{selectedBook?.title}"</h2>
+                <p className="text-sm text-neutral-500">Find bookstores near you or shop online.</p>
+              </div>
+              {selectedBook?.coverImage && (
+                <div className="px-4 pb-2 w-[130px] flex items-center justify-end">
+                  <img
+                    src={selectedBook.coverImage}
+                    alt={selectedBook.title}
+                    className="w-24 h-36 rounded-lg shadow-lg object-cover"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Tabs */}
+            <div className="px-4 pt-3 pb-2 sticky top-0 bg-white z-20 border-b border-neutral-100">
+              <div className="bg-neutral-300 rounded-full p-1 flex flex-row-reverse gap-1">
+                <button
+                  className={`flex-1 py-2 rounded-full text-sm font-medium transition-colors duration-500 ${buyTab === 'inStore' ? 'bg-white shadow text-neutral-900' : 'text-neutral-600'}`}
+                  onClick={() => setBuyTab('inStore')}
+                >
+                  In-Store
+                </button>
+                <button
+                  className={`flex-1 py-2 rounded-full text-sm font-medium transition-colors duration-500 ${buyTab === 'online' ? 'bg-white shadow text-neutral-900' : 'text-neutral-600'}`}
+                  onClick={() => setBuyTab('online')}
+                >
+                  Online
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {/* In-Store */}
+              {buyTab === 'inStore' && (
+                <div className="px-4 py-4 space-y-4">
+                  <h2 className="text-sm font-semibold text-blue-600">Discover Locally</h2>
+
+                  {mapUrl && (
+                    <img
+                      src={mapUrl}
+                      alt="Nearby map"
+                      className="w-full h-32 rounded-xl object-cover border border-neutral-200"
+                    />
+                  )}
+
+                  {buyLoading && (buyLocations?.length ?? 0) === 0 ? (
+                    <p className="text-sm text-neutral-500">Finding bookstores near you…</p>
+                  ) : (buyLocations?.length ?? 0) === 0 ? (
+                    <p className="text-sm text-neutral-500">No stores found near your location.</p>
+                  ) : (
                     <>
-                      <div className=' flex justify-start pt-4 items-start'>
-                          {/* Book Name */}
-                        <div className="px-4 pt-2 pb-1 max-w-[16rem] min-w-0">
-                          <h2 className="text-lg font-bold text-neutral-900">Buy "{selectedBook?.title}"</h2>
-                          <p className="text-sm text-neutral-500">Find bookstores near you or shop online.</p>
-                        </div>
-                        {/* image */}
-                        {selectedBook?.coverImage && (
-                          <div className="px-4 pb-2 w-[130px] flex items-center justify-end">
-                            <img
-                              src={selectedBook.coverImage}
-                              alt={selectedBook.title}
-                              className="w-24 h-36 rounded-lg shadow-lg object-cover"
-                            />
-                          </div>
-                        )}
-                      </div>
-                      {/* Tabs */}
-                      <div className="px-4 pt-3 pb-2 sticky top-0 bg-white z-20 border-b border-neutral-100">
-                        <div className="bg-neutral-300 rounded-full p-1 flex flex-row-reverse gap-1">
-                          <button
-                            className={`flex-1 py-2 rounded-full text-sm font-medium transition-colors duration-500 ${
-                              buyTab === 'inStore' ? 'bg-white shadow text-neutral-900' : 'text-neutral-600'
-                            }`}
-                            onClick={() => setBuyTab('inStore')}
-                          >
-                            In-Store
-                          </button>
-                          <button
-                            className={`flex-1 py-2 rounded-full text-sm font-medium transition-colors duration-500 ${
-                              buyTab === 'online' ? 'bg-white shadow text-neutral-900' : 'text-neutral-600'
-                            }`}
-                            onClick={() => setBuyTab('online')}
-                          >
-                            Online
-                          </button>
-                        </div>
-                      </div>
+                      <div className="space-y-3">
+                        {buyLocations.map((store, idx) => {
+                          const key = store.place_id || store.name || `store-${idx}`;
+                          return (
+                            <article key={key} className="p-4 rounded-2xl border border-neutral-200 bg-white shadow-sm">
+                              <div className="min-w-0">
+                                <h3 className="text-[15px] font-semibold text-neutral-900 line-clamp-1">
+                                  {store.name || 'Bookstore'}
+                                </h3>
+                                {store.address && (
+                                  <p className="text-xs text-neutral-500 mt-0.5 line-clamp-2">{store.address}</p>
+                                )}
+                                {typeof store.distance === 'number' && (
+                                  <p className="text-[11px] text-neutral-400 mt-0.5">
+                                    ~{store.distance.toFixed(1)} km away
+                                  </p>
+                                )}
+                              </div>
 
-                      <div className="flex-1 overflow-y-auto">
-                        {/* In-Store (uses buyLocations/mapUrl/loadMoreBuy if available) */}
-                        {buyTab === 'inStore' && (
-                          <div className="px-4 py-4 space-y-4">
-                            <h2 className="text-sm font-semibold text-blue-600">Discover Locally</h2>
-
-                            {mapUrl && (
-                              <img
-                                src={mapUrl}
-                                alt="Nearby map"
-                                className="w-full h-32 rounded-xl object-cover border border-neutral-200"
-                              />
-                            )}
-
-                            {buyLoading && (buyLocations?.length ?? 0) === 0 ? (
-                              <p className="text-sm text-neutral-500">Finding bookstores near you…</p>
-                            ) : (buyLocations?.length ?? 0) === 0 ? (
-                              <p className="text-sm text-neutral-500">No stores found near your location.</p>
-                            ) : (
-                              <>
-                                <div className="space-y-3">
-                                  {buyLocations.map((store, idx) => {
-                                    const key = store.place_id || store.name || `store-${idx}`;
-                                    return (
-                                      <article key={key} className="p-4 rounded-2xl border border-neutral-200 bg-white shadow-sm">
-                                        <div className="min-w-0">
-                                          <h3 className="text-[15px] font-semibold text-neutral-900 line-clamp-1">
-                                            {store.name || 'Bookstore'}
-                                          </h3>
-                                          {store.address && (
-                                            <p className="text-xs text-neutral-500 mt-0.5 line-clamp-2">{store.address}</p>
-                                          )}
-                                          {typeof store.distance === 'number' && (
-                                            <p className="text-[11px] text-neutral-400 mt-0.5">
-                                              ~{store.distance.toFixed(1)} km away
-                                            </p>
-                                          )}
-                                        </div>
-
-                                        <div className="mt-3 flex gap-2">
-                                          {store.address && (
-                                            <a
-                                              href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(store.address)}`}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-xl bg-blue-600 text-white text-xs font-semibold"
-                                            >
-                                              Get Directions
-                                            </a>
-                                          )}
-                                          {store.website && (
-                                            <a
-                                              href={store.website}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-xl bg-neutral-800 text-white text-xs font-semibold"
-                                            >
-                                              Visit Website
-                                            </a>
-                                          )}
-                                        </div>
-                                      </article>
-                                    );
-                                  })}
-                                </div>
-
-                                {/* See more */}
-                                <div className="flex items-center justify-center mt-2">
-                                  <button
-                                    disabled={!buyHasMore || buyLoading}
-                                    onClick={typeof loadMoreBuy === 'function' ? loadMoreBuy : undefined}
-                                    className="px-4 py-2 rounded-full text-sm font-semibold bg-neutral-100 hover:bg-neutral-200 disabled:opacity-50"
-                                  >
-                                    {buyLoading ? 'Loading…' : (buyHasMore ? 'See more' : 'No more results')}
-                                  </button>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Online (MERCHANTS grid, uses merchant.getLink) */}
-                        {buyTab === 'online' && (
-                          <div className="px-4 py-4">
-                            <h2 className="text-sm font-semibold text-orange-500 mb-3">Shop Online</h2>
-                          {/* Note: MERCHANTS is a predefined constant with merchant details */}
-                          {/* disclaimer */}
-                            <div className="text-xs text-neutral-500 italic mb-3">
-                              Note: Availability and prices may vary. Clicking a link takes you to the merchant's site.
-                            </div>
-                            <div className="mt-4 grid gap-1" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
-                              {Object.values(MERCHANTS).map(merchant => {
-                                const link = merchant.getLink?.(selectedBook || {}) || merchant.homepage;
-                                const isHomepage = link === merchant.homepage;
-                                return (
+                              <div className="mt-3 flex gap-2">
+                                {store.address && (
                                   <a
-                                    key={merchant.name}
-                                    href={link}
+                                    href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(store.address)}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className=" p-4 active:scale-[0.98] transition"
+                                    className="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-xl bg-blue-600 text-white text-xs font-semibold"
                                   >
-                                    <div className="flex items-center gap-2 border border-neutral-200 rounded-xl p-3 shadow-sm hover:shadow-md transition">
-                                      <span className={`flex items-center justify-center w-12 h-12 rounded-xl ring-1 ring-black/5 ${merchant.color}`}>
-                                        <img src={merchant.logo} alt={merchant.name} className="w-10 h-12 object-contain" />
-                                      </span>
-                                      <div className="min-w-0">
-                                        <div className="text-[15px] font-semibold text-neutral-900 line-clamp-1">{merchant.name}</div>
-                                        <div className="text-[12px] text-center w-fulltext-neutral-500">{isHomepage ? 'Visit Store' : 'View Book'}</div>
-                                      </div>
-                                    </div>
-                                    
+                                    Get Directions
                                   </a>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
+                                )}
+                                {store.website && (
+                                  <a
+                                    href={store.website}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-xl bg-neutral-800 text-white text-xs font-semibold"
+                                  >
+                                    Visit Website
+                                  </a>
+                                )}
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+
+                      {/* See more */}
+                      <div className="flex items-center justify-center mt-2">
+                        <button
+                          disabled={!buyHasMore || buyLoading}
+                          onClick={typeof loadMoreBuy === 'function' ? loadMoreBuy : undefined}
+                          className="px-4 py-2 rounded-full text-sm font-semibold bg-neutral-100 hover:bg-neutral-200 disabled:opacity-50"
+                        >
+                          {buyLoading ? 'Loading…' : (buyHasMore ? 'See more' : 'No more results')}
+                        </button>
                       </div>
                     </>
                   )}
+                </div>
+              )}
 
-                  {/* BORROW CONTENT 
-                  {showBuyBorrowModal === 'borrow' && (
-                    <div className="flex-1 place-items-start overflow-y-auto px-4 py-4">
-                      <div className='flex-shrink-0 flex items-start py-4 mb-4'>
-
-                          
-                        <div className="px-4 pt-2 pb-1 max-w-[16rem]">
-                          <h2 className="text-lg font-bold line-clamp-3 text-neutral-900">"{selectedBook?.title}"</h2>
-                          <p className="text-sm text-neutral-500">Find libraries near you that may have this book.</p>
-                        </div>
-                        
-                        {selectedBook?.coverImage && (
-                          <div className="px-4 pb-2">
-                            <img
-                              src={selectedBook.coverImage}
-                              alt={selectedBook.title}
-                              className="w-24 h-36 rounded-lg shadow-lg object-cover"
-                            />
+              {/* Online */}
+              {buyTab === 'online' && (
+                <div className="px-4 py-4">
+                  <h2 className="text-sm font-semibold text-orange-500 mb-3">Shop Online</h2>
+                  <div className="text-xs text-neutral-500 italic mb-3">
+                    Note: Availability and prices may vary. Clicking a link takes you to the merchant's site.
+                  </div>
+                  <div className="mt-4 grid gap-1" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+                    {Object.values(MERCHANTS).map(merchant => {
+                      const link = merchant.getLink?.(selectedBook || {}) || merchant.homepage;
+                      const isHomepage = link === merchant.homepage;
+                      return (
+                        <a
+                          key={merchant.name}
+                          href={link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-4 active:scale-[0.98] transition"
+                        >
+                          <div className="flex items-center gap-2 border border-neutral-200 rounded-xl p-3 shadow-sm hover:shadow-md transition">
+                            <span className={`flex items-center justify-center w-12 h-12 rounded-xl ring-1 ring-black/5 ${merchant.color}`}>
+                              <img src={merchant.logo} alt={merchant.name} className="w-10 h-12 object-contain" />
+                            </span>
+                            <div className="min-w-0">
+                              <div className="text-[15px] font-semibold text-neutral-900 line-clamp-1">{merchant.name}</div>
+                              <div className="text-[12px] text-center w-fulltext-neutral-500">{isHomepage ? 'Visit Store' : 'View Book'}</div>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                      <h2 className="text-sm font-semibold text-indigo-600 mb-3">Borrow from Libraries Nearby</h2>
+                        </a>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
 
-                      {mapUrl && (
-                        <img
-                          src={mapUrl}
-                          alt="Nearby map"
-                          className="w-full h-32 rounded-xl object-cover border border-neutral-200 mb-3"
-                        />
-                      )}
-                      
-                      <div className="text-xs text-neutral-500 italic mb-3">
-                        Note: Library availability may vary. Check with the library for current status. Accurate stock status may not be available.
-                      </div>
+        {/* BORROW CONTENT */}
+        {showBuyBorrowModal === 'borrow' && (
+          <>
+            <div className='flex justify-start pt-4 items-start'>
+              <div className="px-4 pt-2 pb-1 max-w-[16rem] min-w-0">
+                <h2 className="text-lg font-bold text-neutral-900">Borrow "{selectedBook?.title}"</h2>
+                <p className="text-sm text-neutral-500">Find libraries near you that may have this book.</p>
+              </div>
+              {selectedBook?.coverImage && (
+                <div className="px-4 pb-2 w-[130px] flex items-center justify-end">
+                  <img
+                    src={selectedBook.coverImage}
+                    alt={selectedBook.title}
+                    className="w-24 h-36 rounded-lg shadow-lg object-cover"
+                  />
+                </div>
+              )}
+            </div>
 
-                      {libLoading && (nearbyLibraries?.length ?? 0) === 0 ? (
-                        <p className="text-sm text-neutral-500">Finding libraries near you…</p>
-                      ) : (nearbyLibraries?.length ?? 0) === 0 ? (
-                        <p className="text-sm text-neutral-500">No libraries found near your location.</p>
-                      ) : (
-                        <>
-                          <div className="space-y-3 w-full">
-                            {nearbyLibraries.map((lib, idx) => {
-                              const key = lib.place_id || lib.name || `lib-${idx}`;
-                              return (
-                                <article key={key} className="p-4 rounded-2xl border border-neutral-200 bg-white shadow-sm w-full flex-1">
-                                  <div className="min-w-0">
-                                    <h3 className="text-[15px] font-semibold text-neutral-900 line-clamp-1">
-                                      {lib.name || 'Library'}
-                                    </h3>
-                                    {lib.address && (
-                                      <p className="text-xs text-neutral-500 mt-0.5 line-clamp-2">{lib.address}</p>
-                                    )}
-                                    {typeof lib.distance === 'number' && (
-                                      <p className="text-[11px] text-neutral-400 mt-0.5">
-                                        ~{lib.distance.toFixed(1)} km away
-                                      </p>
-                                    )}
-                                  </div>
+            <div className="flex-1 overflow-y-auto">
+              <h2 className="text-sm font-semibold text-indigo-600 mb-3">Borrow from Libraries Nearby</h2>
 
-                                  <div className="mt-3 flex gap-2">
-                                    {lib.address && (
-                                      <a
-                                        href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lib.address)}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold"
-                                      >
-                                        Get Directions
-                                      </a>
-                                    )}
-                                    {lib.website && (
-                                      <a
-                                        href={lib.website}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-xl bg-neutral-800 text-white text-xs font-semibold"
-                                      >
-                                        Library Site
-                                      </a>
-                                    )}
-                                  </div>
-                                </article>
-                              );
-                            })}
+              {mapUrl && (
+                <img
+                  src={mapUrl}
+                  alt="Nearby map"
+                  className="w-full h-32 rounded-xl object-cover border border-neutral-200 mb-3"
+                />
+              )}
+
+              <div className="text-xs text-neutral-500 italic mb-3">
+                Note: Library availability may vary. Check with the library for current status. Accurate stock status may not be available.
+              </div>
+
+              {libLoading && (nearbyLibraries?.length ?? 0) === 0 ? (
+                <p className="text-sm text-neutral-500">Finding libraries near you…</p>
+              ) : (nearbyLibraries?.length ?? 0) === 0 ? (
+                <p className="text-sm text-neutral-500">No libraries found near your location.</p>
+              ) : (
+                <>
+                  <div className="space-y-3 w-full">
+                    {nearbyLibraries.map((lib, idx) => {
+                      const key = lib.place_id || lib.name || `lib-${idx}`;
+                      return (
+                        <article key={key} className="p-4 rounded-2xl border border-neutral-200 bg-white shadow-sm w-full flex-1">
+                          <div className="min-w-0">
+                            <h3 className="text-[15px] font-semibold text-neutral-900 line-clamp-1">
+                              {lib.name || 'Library'}
+                            </h3>
+                            {lib.address && (
+                              <p className="text-xs text-neutral-500 mt-0.5 line-clamp-2">{lib.address}</p>
+                            )}
+                            {typeof lib.distance === 'number' && (
+                              <p className="text-[11px] text-neutral-400 mt-0.5">
+                                ~{lib.distance.toFixed(1)} km away
+                              </p>
+                            )}
                           </div>
 
-                          
-                          <div className="flex items-center justify-center mt-2">
-                            <button
-                              disabled={!libHasMore || libLoading}
-                              onClick={typeof loadMoreBorrow === 'function' ? loadMoreBorrow : undefined}
-                              className="px-4 py-2 rounded-full text-sm font-semibold bg-neutral-100 hover:bg-neutral-200 disabled:opacity-50"
-                            >
-                              {libLoading ? 'Loading…' : (libHasMore ? 'See more' : 'No more results')}
-                            </button>
+                          <div className="mt-3 flex gap-2">
+                            {lib.address && (
+                              <a
+                                href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lib.address)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold"
+                              >
+                                Get Directions
+                              </a>
+                            )}
+                            {lib.website && (
+                              <a
+                                href={lib.website}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-xl bg-neutral-800 text-white text-xs font-semibold"
+                              >
+                                Library Site
+                              </a>
+                            )}
                           </div>
-                        </>
-                      )}
-                    </div>
-                  )}
+                        </article>
+                      );
+                    })}
+                  </div>
 
-                  */}
+                  <div className="flex items-center justify-center mt-2">
+                    <button
+                      disabled={!libHasMore || libLoading}
+                      onClick={typeof loadMoreBorrow === 'function' ? loadMoreBorrow : undefined}
+                      className="px-4 py-2 rounded-full text-sm font-semibold bg-neutral-100 hover:bg-neutral-200 disabled:opacity-50"
+                    >
+                      {libLoading ? 'Loading…' : (libHasMore ? 'See more' : 'No more results')}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </>
+        )}
+      </BottomSheet>
+
+      {/* Fixed Footer CTA: opens Buy/Borrow modal; hides while modal is open */}
+      {selectedBook && !showBuyBorrowModal && (
+        <div className="fixed bottom-3 left-0 right-0 z-[2200] px-4 pointer-events-none">
+          <div className="max-w-3xl mx-auto pointer-events-auto">
+            <div className="rounded-2xl shadow-lg ring-1 ring-black/5 overflow-hidden bg-white">
+              <div className="flex items-center gap-3 px-3 py-2">
+                <img
+                  src={selectedBook.coverImage || '/default-cover.png'}
+                  alt={selectedBook.title}
+                  className="w-10 h-14 object-cover rounded-md border border-neutral-200"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-semibold text-neutral-900 truncate">
+                    {selectedBook.title}
+                  </div>
+                  <div className="text-[11px] text-neutral-500 truncate">
+                    by {selectedBook.author || 'Unknown'}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowBuyBorrowModal('borrow')}
+                    className="px-3 py-2 rounded-xl text-xs font-semibold bg-neutral-100 hover:bg-neutral-200 text-neutral-800 focus:outline-none focus:ring-2 focus:ring-orange-300"
+                    aria-label="Borrow options"
+                  >
+                    Borrow
+                  </button>
+                  <button
+                    onClick={() => setShowBuyBorrowModal('buy')}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 shadow focus:outline-none focus:ring-2 focus:ring-orange-300"
+                    aria-label="Buy options"
+                  >
+                    Buy
+                  </button>
                 </div>
               </div>
-            )}
-            
+            </div>
           </div>
-            
-        </BottomSheet>
-
-        
-      </div>
-    </>
-  );
-}
+        </div>
+      )}
+     </div></>  );
+} 

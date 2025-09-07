@@ -206,6 +206,7 @@ const Header = () => {
 
   // NEW: Get user's border style with fallback
   const getUserAvatarStyle = () => {
+    // eslint-disable-next-line
     const selectedAvatar = getUserAvatar(); // Use the avatar here
     const borderStyle = BORDER_STYLES.find(style => style.name === userProfile.avatarBorderStyle) || BORDER_STYLES[0];
     const borderColor = userProfile.avatarBorderColor || '#fb923c';

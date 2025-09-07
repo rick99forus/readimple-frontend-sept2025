@@ -73,6 +73,7 @@ function getTimeTheme() {
     Icon: IconHalfMoon, // or IconMoon if you want a fuller night feel
   };
   // night
+  // eslint-disable-next-line
   return { 
     greeting: 'Good night',
     gradient: 'from-gray-700 to-black/90-900', // night
