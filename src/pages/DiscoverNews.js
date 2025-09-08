@@ -491,13 +491,18 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
                 role="button"
                 aria-label={`Open ${b.title}`}
               >
-                <div className="flex gap-3">
-                  <div className='flex flex-col gap-2 items-start'>
-                  {hookPhrases[b.id] && (
-                        <span className="italic text-[11px] text-green-600 font-semibold px-2 py-0.5 rounded-full border border-green-200 bg-green-50/80 shadow">
+                <div className='flex flex-col gap-1 items-start mb-4 capitalize'>
+                <span className='h-1 w-full bg-neutral-100 border border-none  mb-2'></span>
+                {hookPhrases[b.id] && (
+                        <span className="italic text-sm  w-auto">
                           {hookPhrases[b.id]}
                         </span>
                       )}
+                      
+                </div>
+                <div className="flex gap-3">
+                  <div className='flex flex-col gap-2 items-start'>
+                  
                   {/* Thumb */}
                   <div className="relative w-24 h-32 flex-shrink-0 rounded-xl overflow-hidden border border-neutral-200 bg-neutral-100 flex-col">
                     <img
@@ -506,7 +511,7 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
                       className="absolute inset-0 w-full h-full object-cover"
                       loading="lazy"
                     />
-                    <div className="absolute top-1.5 left-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full capitalize shadow bg-white/90 text-black/80">
+                    <div className="absolute top-1.5 left-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full capitalize bg-white/90 text-black/80">
                       {b._genre || b.categories?.[0] || 'Books'}
                     </div>
                   </div>
