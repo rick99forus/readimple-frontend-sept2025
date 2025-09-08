@@ -70,6 +70,11 @@ const CAMERA_PERMISSION_KEY = 'camera_permission_v2';
 export default function Scan({ setShowTabBar, setShowHeader }) {
   const navigate = useNavigate();
 
+  const handleScanResult = (book) => {
+    if (!book) return;
+    navigate('/discover', { state: { book } });
+  };
+
   // UI state
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
