@@ -511,9 +511,6 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
                       className="absolute inset-0 w-full h-full object-cover"
                       loading="lazy"
                     />
-                    <div className="absolute top-1.5 left-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full capitalize bg-white/90 text-black/80">
-                      {b._genre || b.categories?.[0] || 'Books'}
-                    </div>
                   </div>
                   </div>
                   {/* Copy */}
