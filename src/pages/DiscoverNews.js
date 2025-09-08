@@ -492,8 +492,14 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
                 aria-label={`Open ${b.title}`}
               >
                 <div className="flex gap-3">
+                  <div className='flex flex-col gap-2 items-start'>
+                  {hookPhrases[b.id] && (
+                        <span className="italic text-[11px] text-green-600 font-semibold px-2 py-0.5 rounded-full border border-green-200 bg-green-50/80 shadow">
+                          {hookPhrases[b.id]}
+                        </span>
+                      )}
                   {/* Thumb */}
-                  <div className="relative w-24 h-32 flex-shrink-0 rounded-xl overflow-hidden border border-neutral-200 bg-neutral-100">
+                  <div className="relative w-24 h-32 flex-shrink-0 rounded-xl overflow-hidden border border-neutral-200 bg-neutral-100 flex-col">
                     <img
                       src={b.coverImage || '/default-cover.png'}
                       alt={b.title}
@@ -504,17 +510,14 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
                       {b._genre || b.categories?.[0] || 'Books'}
                     </div>
                   </div>
-
+                  </div>
                   {/* Copy */}
                   <div className="min-w-0 flex-1">
+                  
                     {/* Kicker row */}
                     <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-orange-600 font-semibold mb-0.5">
                       <span className="truncate">{kicker}</span>
-                      {hookPhrases[b.id] && (
-                        <span className="ml-2 px-2 py-0.5 rounded bg-orange-100 text-orange-700 font-bold text-[11px]">
-                          {hookPhrases[b.id]}
-                        </span>
-                      )}
+                      
                     </div>
 
                     <h2 className="text-[16px] leading-snug font-extrabold text-neutral-900 line-clamp-2">
