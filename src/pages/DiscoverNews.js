@@ -617,37 +617,19 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
             </div>
           </div>
 
-          {/* Details quick links */}
-          <div className="px-6">
-            <div className="flex flex-wrap gap-2 mt-2">
-              {selectedBook?.previewLink && (
-                <a href={selectedBook.previewLink} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 rounded-full text-xs bg-neutral-100 hover:bg-neutral-200">
-                  Google Preview
-                </a>
-              )}
-              {selectedBook?.infoLink && (
-                <a href={selectedBook.infoLink} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 rounded-full text-xs bg-neutral-100 hover:bg-neutral-200">
-                  More Info
-                </a>
-              )}
-              {(() => {
-                const isbn = selectedBook?.isbn_13 || selectedBook?.isbn13 || selectedBook?.isbn;
-                if (!isbn) return null;
-                const wc = getWorldCatLink(isbn);
-                return wc ? (
-                  <a href={wc} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 rounded-full text-xs bg-neutral-100 hover:bg-neutral-200">
-                    WorldCat
-                  </a>
-                ) : null;
-              })()}
+          {/* --- Book Introduction (Teaser) --- */}
+          {selectedBook?.id && teasers[selectedBook.id] && (
+            <div className="px-6 py-3 mb-2 bg-orange-50 rounded-xl border border-orange-100 shadow-sm">
+              <div className="font-bold text-orange-600 mb-1 text-base">Introduction</div>
+              <div className="text-[15px] text-neutral-900 italic">{teasers[selectedBook.id]}</div>
             </div>
-          </div>
+          )}
 
           {/* Summary */}
           <div className="gap-4 px-6 py-4 border-b-2 border-neutral-100 border-solid">
-            <div className="font-bold mb-1 text-lg text-orange-500">Book Summary</div>
+            <div className="font-bold mb-2 text-lg text-orange-500">More about the Book</div>
             {summarySections.length === 0 ? (
-              <div className="text-base text-neutral-400 font-medium mb-2">Loading summary…</div>
+              <div className="text-base text-neutral-400 font-medium mb-2 pl-2">Loading summary…</div>
             ) : (
               summarySections.map((section, idx) => (
                 <div key={`${section.subtitle || 'section'}-${idx}`} className="mb-4">
@@ -660,17 +642,10 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
               <span className="font-semibold text-orange-500">AI Notice:</span> Some content is AI-generated and may contain minor errors.
             </div>
           </div>
-
-          {/* Quotes */}
-          <div className="gap-4 px-6 py-4">
-            <div className="font-bold mb-1 text-lg text-orange-500">Popular Quotes</div>
-            <div className="text-base text-neutral-500 mb-2 italic whitespace-pre-line">
-              {bookQuotes || 'No quotes found.'}
-            </div>
-          </div>
+          
         </div>
       </BottomSheet>
-
+      
       {/* Fixed Footer CTA — shown only when the details sheet is open and no modal sits on top */}
       {openSheet && selectedBook && !showBuyBorrowModal && (
         <div className="fixed bottom-3 left-0 right-0 z-[2000] px-4">
