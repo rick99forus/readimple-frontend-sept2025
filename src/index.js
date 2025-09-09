@@ -3,6 +3,8 @@ import ReactDOM from 'react-dom';
 import App from './App';
 import './index.css';
 
+import { inject } from '@vercel/analytics';
+inject();
 // Import Leaflet CSS globally
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
