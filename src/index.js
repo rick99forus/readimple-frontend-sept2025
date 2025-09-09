@@ -5,6 +5,7 @@ import './index.css';
 import { inject } from '@vercel/analytics';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { SpeedInsights } from "@vercel/speed-insights/react"
 
 inject(); // Enable Vercel Analytics
 
@@ -17,6 +18,7 @@ L.Icon.Default.mergeOptions({
 
 ReactDOM.render(
   <React.StrictMode>
+    <SpeedInsights/>
     <App />
   </React.StrictMode>,
   document.getElementById('root')
