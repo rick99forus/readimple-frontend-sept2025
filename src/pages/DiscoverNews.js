@@ -6,52 +6,110 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 import { apiCall } from '../utils/api';
 import { getWorldCatLink } from '../utils/worldcatLink';
 import BottomSheet from '../components/BottomSheet';
-import { MERCHANTS, GENRE_GRADIENTS, GENRE_ACCENTS } from '../constants/appConstants';
+import { MERCHANTS, GENRE_GRADIENTS } from '../constants/appConstants';
 
 dayjs.extend(relativeTime);
 
 /* ============================== Config ============================== */
 const TEASER_TTL_DAYS = 7;
-const SEE_MORE_STEP = 8; // how many more stories appear per click
+const SEE_MORE_STEP = 8;
 const HOOK_TTL_DAYS = 14;
+const AUTHOR_BIO_TTL_DAYS = 30;
 
-/* ============================ Teaser cache ========================== */
-function getTeaserFromCache(bookId) {
-  const raw = localStorage.getItem(`teaser_${bookId}`);
+/* ============================ Helpers ============================ */
+function getFromCache(key) {
+  const raw = localStorage.getItem(key);
   if (!raw) return null;
   try {
-    const { teaser, expires } = JSON.parse(raw);
-    if (expires && dayjs().isBefore(dayjs(expires))) return teaser;
-    return null;
-  } catch {
-    return null;
-  }
+    const { value, expires } = JSON.parse(raw);
+    if (!expires || dayjs().isBefore(dayjs(expires))) return value;
+  } catch {}
+  return null;
+}
+function setInCache(key, value, ttlDays) {
+  const expires = dayjs().add(ttlDays, 'day').toISOString();
+  localStorage.setItem(key, JSON.stringify({ value, expires }));
+}
+
+function getTeaserFromCache(bookId) {
+  return getFromCache(`teaser_${bookId}`);
 }
 function setTeaserInCache(bookId, teaser) {
-  const expires = dayjs().add(TEASER_TTL_DAYS, 'day').toISOString();
-  localStorage.setItem(`teaser_${bookId}`, JSON.stringify({ teaser, expires }));
+  setInCache(`teaser_${bookId}`, teaser, TEASER_TTL_DAYS);
 }
 
 function getHookFromCache(bookId) {
-  const raw = localStorage.getItem(`hook_${bookId}`);
-  if (!raw) return null;
+  return getFromCache(`hook_${bookId}`);
+}
+function setHookInCache(bookId, phrase) {
+  setInCache(`hook_${bookId}`, phrase, HOOK_TTL_DAYS);
+}
+
+function getAuthorBioFromCache(author) {
+  return getFromCache(`author_bio_${author}`);
+}
+function setAuthorBioInCache(author, bio) {
+  setInCache(`author_bio_${author}`, bio, AUTHOR_BIO_TTL_DAYS);
+}
+// eslint-disable-next-line
+function isRecentBook(book) {
+  if (!book || !book.publishedDate) return false;
+  const year = parseInt((book.publishedDate || '').slice(0, 4), 10);
+  return year && year >= new Date().getFullYear() - 2;
+}
+
+function normalizeIsbn(book) {
+  // Support various shapes: {industryIdentifiers:[{type:'ISBN_13',identifier:'...'}]} or direct fields
+  const ids = book?.industryIdentifiers || [];
+  const map = {};
+  ids.forEach(i => (map[i.type] = i.identifier));
+  return {
+    isbn13: book?.isbn13 || map.ISBN_13 || book?.isbn || '',
+    isbn10: book?.isbn10 || map.ISBN_10 || '',
+  };
+}
+
+// Helper: simple similarity check (can be improved with fuzzy matching)
+// eslint-disable-next-line
+function isSimilarBook(selectedBook, candidate, hookPhrases, teasers) {
+  if (!selectedBook || !candidate || selectedBook.id === candidate.id) return false;
+  const selHook = hookPhrases[selectedBook.id]?.toLowerCase() || '';
+  const candHook = hookPhrases[candidate.id]?.toLowerCase() || '';
+  const selTeaser = teasers[selectedBook.id]?.toLowerCase() || '';
+  const candTeaser = teasers[candidate.id]?.toLowerCase() || '';
+  // Check for any word overlap in hook or teaser
+  const overlap = (a, b) => a && b && a.split(/\W+/).some(w => w.length > 2 && b.includes(w));
+  return overlap(selHook, candHook) || overlap(selTeaser, candTeaser);
+}
+
+function SectionTitle({ children, accent = 'text-orange-500' }) {
+  return <div className={`font-bold mb-2 text-lg ${accent}`}>{children}</div>;
+}
+// eslint-disable-next-line
+function Chip({ children }) {
+  return (
+    <span className="inline-flex items-center px-2 py-1 rounded-full text-[12px] font-medium bg-neutral-100 text-neutral-700 border border-neutral-200">
+      {children}
+    </span>
+  );
+}
+
+// Add this helper in your DiscoverNews.js
+// eslint-disable-next-line
+async function fetchGoogleCover(title, author) {
   try {
-    const { phrase, expires } = JSON.parse(raw);
-    if (expires && dayjs().isBefore(dayjs(expires))) return phrase;
-    return null;
+    const q = `intitle:${title} inauthor:${author}`;
+    const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=1`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const item = data.items?.[0]?.volumeInfo;
+    return item?.imageLinks?.thumbnail?.replace('http:', 'https:') || null;
   } catch {
     return null;
   }
 }
-function setHookInCache(bookId, phrase) {
-  const expires = dayjs().add(HOOK_TTL_DAYS, 'day').toISOString();
-  localStorage.setItem(`hook_${bookId}`, JSON.stringify({ phrase, expires }));
-}
 
-function isRecentBook(book) {
-  const year = parseInt((book.publishedDate || '').slice(0, 4), 10);
-  return year && year >= (new Date().getFullYear() - 2);
-}
+
 
 /* ============================= Component ============================ */
 export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
@@ -62,35 +120,35 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
 
   /* ---------- UI & profile ---------- */
   const [profile, setProfile] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('profile') || '{}');
-    } catch {
-      return {};
-    }
+    try { return JSON.parse(localStorage.getItem('profile') || '{}'); } catch { return {}; }
   });
 
   /* ---------- AI content ---------- */
   const [summarySections, setSummarySections] = useState([]);
   const [bookQuotes, setBookQuotes] = useState('');
+  const [authorBio, setAuthorBio] = useState('');
 
-  /* ---------- Teasers (AI) ---------- */
-  const [teasers, setTeasers] = useState({}); // { [bookId]: teaser }
+  /* ---------- Teasers & Hooks (AI) ---------- */
+  const [teasers, setTeasers] = useState({});
+  const [hookPhrases, setHookPhrases] = useState({});
 
-  /* ---------- Hook phrases (AI) ---------- */
-  const [hookPhrases, setHookPhrases] = useState({}); // { [bookId]: phrase }
+  /* ---------- AI Similar Books ---------- */
+  const [aiSimilarBooks, setAiSimilarBooks] = useState([]);
 
   /* ---------- Buy modal ---------- */
-  const [showBuyBorrowModal, setShowBuyBorrowModal] = useState(null); // 'buy' | null
+  const [showBuyBorrowModal, setShowBuyBorrowModal] = useState(null);
   const [buyTab, setBuyTab] = useState('online');
 
   /* ---------- See more (river pagination) ---------- */
-  const [visibleCount, setVisibleCount] = useState(9); // 1 lead + 8 river to start
+  const [visibleCount, setVisibleCount] = useState(9);
   const visibleBooks = useMemo(() => books.slice(0, visibleCount), [books, visibleCount]);
   const hasMoreStories = visibleBooks.length < books.length;
 
-  /* ---------- Refs & router ---------- */
+  /* ---------- Router ---------- */
   const location = useLocation();
   const navigate = useNavigate();
+
+  /* ---------- Refs ---------- */
   const bottomSheetContentRef = useRef(null);
 
   /* ---------- Genre theming ---------- */
@@ -100,24 +158,31 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
   );
   const genreGradient = GENRE_GRADIENTS[genreKey] || GENRE_GRADIENTS.default;
 
-  /* ========================= Lifecycle/UI chrome ========================= */
-  useEffect(() => {
-    setShowHeader?.(true);
-    setShowTabBar?.(true);
-  }, [setShowHeader, setShowTabBar]);
+  /* ---------- Section anchors ---------- */
+  const anchors = {
+    overview: useRef(null),
+    summary: useRef(null),
+    themes: useRef(null),
+    quotes: useRef(null),
+    author: useRef(null),
+    editions: useRef(null),
+    borrow: useRef(null),
+    similar: useRef(null),
+  };
+  // eslint-disable-next-line
+  const scrollTo = (ref) => {
+    const el = ref?.current;
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
-  useEffect(() => {
-    // Hide the tab bar when the sheet is open for a cleaner feel
-    setShowTabBar?.(!openSheet);
-  }, [openSheet, setShowTabBar]);
+  /* ========================= Lifecycle/UI chrome ========================= */
+  useEffect(() => { setShowHeader?.(true); setShowTabBar?.(true); }, [setShowHeader, setShowTabBar]);
+  useEffect(() => { setShowTabBar?.(!openSheet); }, [openSheet, setShowTabBar]);
 
   useEffect(() => {
     const onStorage = () => {
-      try {
-        setProfile(JSON.parse(localStorage.getItem('profile') || '{}'));
-      } catch {
-        setProfile({});
-      }
+      try { setProfile(JSON.parse(localStorage.getItem('profile') || '{}')); } catch { setProfile({}); }
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
@@ -125,19 +190,16 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
 
   /* ========================= Fetch: home-batch ========================= */
   async function fetchBooksInitial() {
-    // Seed from profile or preferredGenres; add a few extras for variety
     let genres;
     try {
       genres = profile.genres?.length
         ? profile.genres
         : JSON.parse(localStorage.getItem('preferredGenres') || '["fiction","history","fantasy","science","biography"]');
-    } catch {
-      genres = ['fiction', 'history', 'fantasy', 'science', 'biography'];
-    }
+    } catch { genres = ['fiction', 'history', 'fantasy', 'science', 'biography']; }
 
     const ALL_GENRES = [
-      'fiction', 'fantasy', 'mystery', 'romance', 'biography', 'thriller', 'self-help',
-      'history', 'science', 'horror', 'adventure', 'classic', 'poetry', 'children', 'education', 'health', 'cookbook'
+      'fiction','fantasy','mystery','romance','biography','thriller','self-help',
+      'history','science','horror','adventure','classic','poetry','children','education','health','cookbook'
     ];
     const extras = ALL_GENRES.filter(g => !genres.includes(g)).sort(() => Math.random() - 0.5).slice(0, 3);
     const mixedGenres = [...genres, ...extras];
@@ -172,13 +234,10 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
       setBooks([]);
     }
   }
+  // eslint-disable-next-line
+  useEffect(() => { fetchBooksInitial(); /* eslint-disable-next-line */ }, [profile]);
 
-  useEffect(() => {
-    fetchBooksInitial();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile]);
-
-  /* ====================== Handle nav-passed book (scan/search) ====================== */
+  /* ====================== Handle nav-passed book ====================== */
   useEffect(() => {
     if (location.state?.book) {
       const navBook = location.state.book;
@@ -188,7 +247,6 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
         return [navBook, ...filtered];
       });
       setOpenSheet(true);
-      // Clear state to avoid duplicate handling
       navigate('.', { replace: true, state: null });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -197,7 +255,6 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
   /* ======================= AI: teasers for visibleBooks ======================= */
   useEffect(() => {
     let isMounted = true;
-
     async function loadTeasers() {
       const map = {};
       for (const book of visibleBooks) {
@@ -211,15 +268,12 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
             });
             teaser = res.data?.teaser || '';
             setTeaserInCache(book.id, teaser);
-          } catch {
-            teaser = '';
-          }
+          } catch { teaser = ''; }
         }
         map[book.id] = teaser;
       }
       if (isMounted) setTeasers(prev => ({ ...prev, ...map }));
     }
-
     if (visibleBooks.length) loadTeasers();
     return () => { isMounted = false; };
   }, [visibleBooks]);
@@ -244,9 +298,7 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
             });
             phrase = res.data?.phrase || '';
             setHookInCache(book.id, phrase);
-          } catch {
-            phrase = '';
-          }
+          } catch { phrase = ''; }
         }
         map[book.id] = phrase;
       }
@@ -263,10 +315,7 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
       const key = `summary_${selectedBook.id}`;
       const cached = localStorage.getItem(key);
       if (cached) {
-        try {
-          setSummarySections(JSON.parse(cached));
-          return;
-        } catch {}
+        try { setSummarySections(JSON.parse(cached)); return; } catch {}
       }
       try {
         const res = await apiCall('/api/books/ai-summary-dynamic', { method: 'POST', data: selectedBook });
@@ -286,10 +335,7 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
       if (!selectedBook?.title) return;
       const key = `book_quotes_${selectedBook.title}_${selectedBook.author}`;
       const cached = localStorage.getItem(key);
-      if (cached) {
-        setBookQuotes(cached);
-        return;
-      }
+      if (cached) { setBookQuotes(cached); return; }
       try {
         const res = await apiCall('/api/books/ai-book-quotes', {
           method: 'POST',
@@ -306,6 +352,53 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
     fetchBookQuotes();
   }, [selectedBook]);
 
+  /* ========================= AI: Author Bio ========================= */
+  useEffect(() => {
+    async function fetchAuthorBio() {
+      const author = selectedBook?.author;
+      if (!author) { setAuthorBio(''); return; }
+      const cached = getAuthorBioFromCache(author);
+      if (cached) { setAuthorBio(cached); return; }
+      try {
+        const res = await apiCall('/api/books/ai-author-bio', {
+          method: 'POST',
+          data: { author }
+        });
+        const bio = res.data?.bio || '';
+        setAuthorBio(bio);
+        setAuthorBioInCache(author, bio);
+      } catch (e) {
+        console.error('Author bio error:', e);
+        setAuthorBio('');
+      }
+    }
+    fetchAuthorBio();
+  }, [selectedBook?.author]);
+
+  /* ========================= AI: Similar Books ========================= */
+  useEffect(() => {
+    async function fetchAiSimilar() {
+      if (!selectedBook?.title) { setAiSimilarBooks([]); return; }
+      try {
+        const res = await apiCall('/api/books/ai-similar', {
+          method: 'POST',
+          data: {
+            title: selectedBook.title,
+            author: selectedBook.author,
+            genre: selectedBook._genre || selectedBook.genres?.[0] || '',
+            teaser: teasers[selectedBook.id] || '',
+            hook: hookPhrases[selectedBook.id] || '',
+          }
+        });
+        setAiSimilarBooks(res.data?.books || []);
+      } catch {
+        setAiSimilarBooks([]);
+      }
+    }
+    fetchAiSimilar();
+    // eslint-disable-next-line
+  }, [selectedBook, teasers, hookPhrases]);
+
   /* ============================== Actions ============================== */
   const handleBookOpen = (book) => {
     try {
@@ -318,17 +411,36 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
 
   const handleBookChange = (newBook) => {
     if (!newBook) return;
-    if (newBook.id === selectedBook?.id) {
-      setOpenSheet(v => !v);
-      return;
-    }
+    if (newBook.id === selectedBook?.id) { setOpenSheet(v => !v); return; }
     setSelectedBook(newBook);
     setOpenSheet(true);
     handleBookOpen(newBook);
-    // Auto-scroll the sheet’s content to top
     setTimeout(() => {
       bottomSheetContentRef.current?.scrollTo?.({ top: 0, behavior: 'smooth' });
     }, 0);
+  };
+// eslint-disable-next-line
+  const { isbn13, isbn10 } = useMemo(() => normalizeIsbn(selectedBook || {}), [selectedBook]);
+  // eslint-disable-next-line
+  const worldcatLink = useMemo(() => getWorldCatLink(selectedBook || {}), [selectedBook]);
+
+  const [showLikedPrompt, setShowLikedPrompt] = useState(false);
+
+  const handleLikeBook = () => {
+    try {
+      const savedRaw = localStorage.getItem('likedBooks') || '[]';
+      const saved = JSON.parse(savedRaw);
+      const exists = saved.some(b => b.id === selectedBook?.id);
+      let next;
+      if (exists) {
+        next = saved.filter(b => b.id !== selectedBook.id);
+      } else {
+        next = [{ ...selectedBook }, ...saved].slice(0, 50);
+        setShowLikedPrompt(true);
+        setTimeout(() => setShowLikedPrompt(false), 2000);
+      }
+      localStorage.setItem('likedBooks', JSON.stringify(next));
+    } catch {}
   };
 
   /* ================================ UI ================================ */
@@ -345,7 +457,7 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
         }}
       />
 
-      {/* ======= News-style feed ======= */}
+      {/* ======= News-style feed (unchanged aside from minor polish) ======= */}
       <div className="min-h-screen w-full bg-white">
         {/* Masthead */}
         <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-neutral-200 px-4 py-3">
@@ -355,7 +467,7 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
           </div>
         </div>
 
-        {/* Lead story */}
+        {/* Lead */}
         {visibleBooks.length > 0 && (() => {
           const lead = visibleBooks[0];
           const teaser = typeof teasers?.[lead.id] === 'string' ? teasers[lead.id] : null;
@@ -373,12 +485,8 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
             >
               <div className="relative rounded-2xl overflow-hidden shadow-sm bg-neutral-200">
                 <div className="relative w-full aspect-[16/9] sm:aspect-[21/9] bg-neutral-100">
-                  <img
-                    src={lead.coverImage || '/default-cover.png'}
-                    alt={lead.title}
-                    className="absolute inset-0 w-full h-full object-cover"
-                    loading="eager"
-                  />
+                  <img src={lead.coverImage || '/default-cover.png'} alt={lead.title}
+                       className="absolute inset-0 w-full h-full object-cover" loading="eager" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent" />
                   <div className="absolute top-2 left-2 right-2 flex items-center gap-2">
                     <span className="inline-flex items-center px-2 py-1 rounded-full text-[11px] font-semibold bg-white/90 text-black/80 shadow">
@@ -418,7 +526,7 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
           );
         })()}
 
-        {/* River (rest of visible books) */}
+        {/* River */}
         <div className="divide-y divide-neutral-100">
           {visibleBooks.slice(1).map((b, idx) => {
             const isFeature = ((idx + 1) % 4 === 0);
@@ -429,23 +537,13 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
               : '';
 
             if (isFeature) {
-              // Wide feature band
               return (
-                <article
-                  key={b.id}
-                  className="py-4 active:opacity-95"
-                  onClick={() => handleBookChange(b)}
-                  role="button"
-                  aria-label={`Open ${b.title}`}
-                >
+                <article key={b.id} className="py-4 active:opacity-95"
+                         onClick={() => handleBookChange(b)} role="button" aria-label={`Open ${b.title}`}>
                   <div className="relative w-full">
                     <div className="relative w-full aspect-[16/9] sm:aspect-[21/9] bg-neutral-200 overflow-hidden rounded-xl">
-                      <img
-                        src={b.coverImage || '/default-cover.png'}
-                        alt={b.title}
-                        className="absolute inset-0 w-full h-full object-cover"
-                        loading="lazy"
-                      />
+                      <img src={b.coverImage || '/default-cover.png'} alt={b.title}
+                           className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-transparent" />
                       <div className="absolute top-2 left-3 right-3 flex items-center gap-2">
                         <span className="inline-flex items-center px-2 py-1 rounded-full text-[11px] font-semibold bg-white/90 text-black/80 shadow">
@@ -457,17 +555,10 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
                         <h3 className="text-[18px] sm:text-[20px] font-extrabold leading-snug text-white line-clamp-3 drop-shadow">
                           {b.title}
                         </h3>
-                        <div className="mt-2 text-[13px] text-white/90 line-clamp-2">
-                          {teaser || ''}
-                        </div>
+                        <div className="mt-2 text-[13px] text-white/90 line-clamp-2">{teaser || ''}</div>
                         <div className="mt-3 flex items-center gap-2 text-[11px] text-white/80">
                           <span className="truncate">By {b.author || 'Unknown'}</span>
-                          {b.publishedDate ? (
-                            <>
-                              <span className="opacity-60">•</span>
-                              <span className="truncate">{b.publishedDate}</span>
-                            </>
-                          ) : null}
+                          {b.publishedDate ? (<><span className="opacity-60">•</span><span className="truncate">{b.publishedDate}</span></>) : null}
                           <span className="ml-auto inline-flex items-center gap-1 bg-white/10 backdrop-blur px-2 py-1 rounded-full">
                             <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
@@ -482,51 +573,23 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
               );
             }
 
-            // Compact news card
             return (
-              <article
-                key={b.id}
-                className="px-4 py-4 active:bg-neutral-50"
-                onClick={() => handleBookChange(b)}
-                role="button"
-                aria-label={`Open ${b.title}`}
-              >
-                <div className='flex flex-col gap-1 items-start mb-4 capitalize'>
-                <span className='h-1 w-full bg-neutral-100 border border-none  mb-2'></span>
-                {hookPhrases[b.id] && (
-                        <span className="italic text-sm  w-auto">
-                          {hookPhrases[b.id]}
-                        </span>
-                      )}
-                      
+              <article key={b.id} className="px-4 py-4 active:bg-neutral-50"
+                       onClick={() => handleBookChange(b)} role="button" aria-label={`Open ${b.title}`}>
+                <div className="flex flex-col gap-1 items-start mb-4 capitalize">
+                  <span className="h-1 w-full bg-neutral-100 border border-none mb-2"></span>
+                  {hookPhrases[b.id] && <span className="italic text-sm w-auto">{hookPhrases[b.id]}</span>}
                 </div>
                 <div className="flex gap-3">
-                  <div className='flex flex-col gap-2 items-start'>
-                  
-                  {/* Thumb */}
-                  <div className="relative w-24 h-32 flex-shrink-0 rounded-xl overflow-hidden border border-neutral-200 bg-neutral-100 flex-col">
-                    <img
-                      src={b.coverImage || '/default-cover.png'}
-                      alt={b.title}
-                      className="absolute inset-0 w-full h-full object-cover"
-                      loading="lazy"
-                    />
+                  <div className="relative w-24 h-32 flex-shrink-0 rounded-xl overflow-hidden border border-neutral-200 bg-neutral-100">
+                    <img src={b.coverImage || '/default-cover.png'} alt={b.title}
+                         className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
                   </div>
-                  </div>
-                  {/* Copy */}
                   <div className="min-w-0 flex-1">
-                  
-                    {/* Kicker row */}
                     <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-orange-600 font-semibold mb-0.5">
                       <span className="truncate">{kicker}</span>
-                      
                     </div>
-
-                    <h2 className="text-[16px] leading-snug font-extrabold text-neutral-900 line-clamp-2">
-                      {b.title}
-                    </h2>
-
-                    {/* Teaser */}
+                    <h2 className="text-[16px] leading-snug font-extrabold text-neutral-900 line-clamp-2">{b.title}</h2>
                     {teaser ? (
                       <p className="text-[13px] text-neutral-700 mt-1 line-clamp-3">{teaser}</p>
                     ) : (
@@ -535,16 +598,13 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
                         <div className="h-3 w-8/12 rounded bg-neutral-200 animate-pulse" />
                       </div>
                     )}
-
                     <div className="mt-2 flex items-center text-[11px] text-neutral-500">
                       <span className="truncate">By {b.author || 'Unknown'}</span>
                       {b.pageCount ? <span className="px-2">·</span> : null}
                       {b.pageCount ? <span>{b.pageCount} pages</span> : null}
                       {b.publishedDate ? <span className="px-2">·</span> : null}
                       {b.publishedDate ? <span className="truncate">{b.publishedDate}</span> : null}
-
-                      {/* CTA chevron */}
-                      <span className="ml-auto inline-flex items-center justify-center w-8 h-8 rounded-xl bg-neutral-100 text-neutral-700 group-hover:bg-neutral-200 transition">
+                      <span className="ml-auto inline-flex items-center justify-center w-8 h-8 rounded-xl bg-neutral-100 text-neutral-700 transition">
                         <svg viewBox="0 0 24 24" className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                         </svg>
@@ -557,15 +617,14 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
           })}
         </div>
 
-        {/* See More (expands river; appends, doesn't reset) */}
+        {/* See More */}
         {hasMoreStories && (
           <div className="flex justify-center items-center py-6">
             <button
               onClick={() => setVisibleCount(c => c + SEE_MORE_STEP)}
               className="group relative inline-flex items-center gap-2 px-6 py-3 rounded-full
                          bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600
-                         text-white font-semibold shadow-lg
-                         transition-all active:scale-[0.98]
+                         text-white font-semibold shadow-lg transition-all active:scale-[0.98]
                          focus:outline-none focus:ring-2 focus:ring-orange-300"
               aria-label="See more stories"
             >
@@ -591,12 +650,8 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
         onClose={() => setOpenSheet(false)}
         title={selectedBook?.title || 'Details'}
       >
-        <div
-          ref={bottomSheetContentRef}
-          className="relative z-10"
-          style={{ paddingBottom: '88px' }}
-        >
-          {/* Book header */}
+        <div ref={bottomSheetContentRef} className="relative z-10" style={{ paddingBottom: '88px' }}>
+          {/* Header */}
           <div className="text-center pt-4 px-4 flex justify-center items-center gap-4">
             <img
               src={selectedBook?.coverImage || '/default-cover.png'}
@@ -617,17 +672,17 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
             </div>
           </div>
 
-          {/* --- Book Introduction (Teaser) --- */}
+          {/* Book Introduction (Teaser) */}
           {selectedBook?.id && teasers[selectedBook.id] && (
-            <div className="px-6 py-3 mb-2 bg-orange-50 rounded-xl border border-orange-100 shadow-sm">
+            <div className="px-6 py-3 bg-orange-50 rounded-none border-b-2 border-orange-100">
               <div className="font-bold text-orange-600 mb-1 text-base">Introduction</div>
               <div className="text-[15px] text-neutral-900 italic">{teasers[selectedBook.id]}</div>
             </div>
           )}
 
           {/* Summary */}
-          <div className="gap-4 px-6 py-4 border-b-2 border-neutral-100 border-solid">
-            <div className="font-bold mb-2 text-lg text-orange-500">More about the Book</div>
+          <div ref={anchors.summary} className="gap-4 px-6 py-4 border-b-2 border-neutral-100">
+            <SectionTitle>More about the Book</SectionTitle>
             {summarySections.length === 0 ? (
               <div className="text-base text-neutral-400 font-medium mb-2 pl-2">Loading summary…</div>
             ) : (
@@ -642,11 +697,93 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
               <span className="font-semibold text-orange-500">AI Notice:</span> Some content is AI-generated and may contain minor errors.
             </div>
           </div>
+
+          {/* Quotes */}
+          <div ref={anchors.quotes} className="px-6 py-4 border-b-2 border-neutral-100">
+            <SectionTitle>Memorable Quotes</SectionTitle>
+            {!bookQuotes ? (
+              <div className="space-y-2">
+                <div className="h-3 w-11/12 rounded bg-neutral-200 animate-pulse" />
+                <div className="h-3 w-9/12 rounded bg-neutral-200 animate-pulse" />
+                <div className="h-3 w-7/12 rounded bg-neutral-200 animate-pulse" />
+              </div>
+            ) : (
+              <ul className="list-disc pl-5 space-y-2 text-neutral-900">
+                {bookQuotes
+                  .split(/\n+/)
+                  .map(q => q.replace(/^[-–•]\s?/, '').trim())
+                  .filter(Boolean)
+                  .slice(0, 8)
+                  .map((q, i) => <li key={i} className="text-[15px]">{q}</li>)}
+              </ul>
+            )}
+          </div>
+
+          {/* Author Spotlight */}
+          <div ref={anchors.author} className="px-6 py-4 border-b-2 border-neutral-100">
+            <SectionTitle>Author Spotlight</SectionTitle>
+            {!selectedBook?.author ? (
+              <div className="text-neutral-500 text-sm">Author information unavailable.</div>
+            ) : !authorBio ? (
+              <div className="space-y-2">
+                <div className="h-3 w-11/12 rounded bg-neutral-200 animate-pulse" />
+                <div className="h-3 w-10/12 rounded bg-neutral-200 animate-pulse" />
+                <div className="h-3 w-8/12 rounded bg-neutral-200 animate-pulse" />
+              </div>
+            ) : (
+              <p className="text-[15px] text-neutral-900">{authorBio}</p>
+            )}
+          </div>
+          {/* Similar Books (AI) */}
+          {selectedBook && (
+  <div ref={anchors.similar} className="px-6 py-4 border-b-2 border-neutral-100">
+    <SectionTitle>You Might Also Like</SectionTitle>
+    <div className="grid grid-cols-3 sm:grid-cols-3 gap-1">
+      {aiSimilarBooks.length > 0 ? (
+        aiSimilarBooks.map((b, idx) => (
+          <div key={b.id || b.title + b.author + idx} className="flex flex-col items-center text-center cursor-pointer"
+               onClick={() => {
+                 const localBook = books.find(book =>
+                   book.title?.toLowerCase() === b.title?.toLowerCase() &&
+                   book.author?.toLowerCase() === b.author?.toLowerCase()
+                 );
+                 handleBookChange(localBook || {
+                   id: `ai-${b.title}-${b.author}`,
+                   title: b.title,
+                   author: b.author,
+                   coverImage: b.coverImage || '/default-cover.png',
+                   _genre: localBook?._genre || '',
+                 });
+               }}
+               role="button"
+               aria-label={`Open ${b.title}`}>
+            <div className="w-20 h-32 mb-2 rounded-lg overflow-hidden border border-neutral-200 bg-neutral-100">
+              <img
+                src={b.coverImage || '/default-cover.png'}
+                alt={b.title}
+                className="w-full h-full object-cover"
+                loading="lazy"
+                onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = '/default-cover.png'; }}
+              />
+            </div>
+            <div className="text-[12px] font-semibold line-clamp-2">{b.title}</div>
+            <div className="text-[11px] text-neutral-500 line-clamp-1">by {b.author || 'Unknown'}</div>
+          </div>
+        ))
+      ) : (
+        <div className="col-span-2 sm:col-span-3 text-center text-neutral-400 py-6">
+          No recommended books found.
+        </div>
+      )}
+    </div>
+  </div>
+)}
+
           
         </div>
       </BottomSheet>
-      
-      {/* Fixed Footer CTA — shown only when the details sheet is open and no modal sits on top */}
+
+      {/* Fixed Footer CTA — Buy & Like */}
       {openSheet && selectedBook && !showBuyBorrowModal && (
         <div className="fixed bottom-3 left-0 right-0 z-[2000] px-4">
           <div className="max-w-3xl mx-auto">
@@ -659,12 +796,8 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
                   loading="lazy"
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="text-[13px] font-semibold text-neutral-900 truncate">
-                    {selectedBook.title}
-                  </div>
-                  <div className="text-[11px] text-neutral-500 truncate">
-                    by {selectedBook.author || 'Unknown'}
-                  </div>
+                  <div className="text-[13px] font-semibold text-neutral-900 truncate">{selectedBook.title}</div>
+                  <div className="text-[11px] text-neutral-500 truncate">by {selectedBook.author || 'Unknown'}</div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -674,6 +807,32 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
                   >
                     Buy
                   </button>
+                  {/* Like button */}
+                  <button
+                    onClick={handleLikeBook}
+                    className={`px-4 py-2 rounded-xl text-xs font-semibold ${(() => {
+                      try {
+                        const savedRaw = localStorage.getItem('likedBooks') || '[]';
+                        const saved = JSON.parse(savedRaw);
+                        return saved.some(b => b.id === selectedBook?.id)
+                          ? 'bg-orange-100 text-orange-700 border border-orange-300'
+                          : 'bg-neutral-100 text-neutral-700 border border-neutral-200';
+                      } catch { return 'bg-neutral-100 text-neutral-700 border border-neutral-200'; }
+                    })()}`}
+                    aria-label="Like/Save to Bookshelf"
+                    title="Save to Bookshelf"
+                  >
+                    <svg viewBox="0 0 24 24" className="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 21l7-5 7 5V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2z" />
+                    </svg>
+                    {(() => {
+                      try {
+                        const savedRaw = localStorage.getItem('likedBooks') || '[]';
+                        const saved = JSON.parse(savedRaw);
+                        return saved.some(b => b.id === selectedBook?.id) ? 'Liked' : 'Like';
+                      } catch { return 'Like'; }
+                    })()}
+                  </button>
                 </div>
               </div>
             </div>
@@ -681,7 +840,7 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
         </div>
       )}
 
-      {/* Buy BottomSheet Modal (modern, online-first) */}
+      {/* Buy Modal */}
       <BottomSheet
         open={showBuyBorrowModal !== null}
         onClose={() => setShowBuyBorrowModal(null)}
@@ -689,7 +848,6 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
       >
         {showBuyBorrowModal === 'buy' && (
           <>
-            {/* Sticky header inside modal */}
             <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-neutral-100 px-4 pt-3 pb-2">
               <div className="flex items-center gap-3">
                 <img
@@ -708,28 +866,22 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
                 </div>
               </div>
 
-              {/* Tabs (single Online for now) */}
               <div className="mt-3 bg-neutral-200 rounded-full p-1 flex gap-1">
                 <button
-                  className={`flex-1 py-2 rounded-full text-sm font-medium transition-colors ${
-                    buyTab === 'online' ? 'bg-white shadow text-neutral-900' : 'text-neutral-600'
-                  }`}
+                  className={`flex-1 py-2 rounded-full text-sm font-medium transition-colors ${buyTab === 'online' ? 'bg-white shadow text-neutral-900' : 'text-neutral-600'}`}
                   onClick={() => setBuyTab('online')}
                   aria-pressed={buyTab === 'online'}
                 >
                   Online
                 </button>
-                {/* In-Store can be added later */}
               </div>
             </div>
 
-            {/* Online merchants */}
             {buyTab === 'online' && (
               <div className="px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <p className="text-xs text-neutral-500 italic mb-3">
                   Availability and prices may vary. Links open in a new tab.
                 </p>
-
                 <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
                   {Object.values(MERCHANTS)
                     .map(m => {
@@ -737,7 +889,7 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
                       const isDirect = !!m.getLink && link && link !== m.homepage;
                       return { merchant: m, link, isDirect };
                     })
-                    .sort((a, b) => (a.isDirect === b.isDirect ? 0 : a.isDirect ? -1 : 1)) // direct book links first
+                    .sort((a, b) => (a.isDirect === b.isDirect ? 0 : a.isDirect ? -1 : 1))
                     .map(({ merchant, link, isDirect }) => (
                       <a
                         key={merchant.name}
@@ -749,17 +901,10 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
                       >
                         <div className="flex items-center gap-4 min-h-20">
                           <span className={`flex items-center justify-center w-12 h-12 rounded-xl ring-1 ring-black/5 ${merchant.color || 'bg-neutral-100'}`}>
-                            <img
-                              src={merchant.logo}
-                              alt={merchant.name}
-                              className="w-9 h-9 object-contain"
-                              loading="lazy"
-                            />
+                            <img src={merchant.logo} alt={merchant.name} className="w-9 h-9 object-contain" loading="lazy" />
                           </span>
                           <div className="min-w-0 flex-1">
-                            <div className="text-[15px] font-semibold text-neutral-900 line-clamp-1">
-                              {merchant.name}
-                            </div>
+                            <div className="text-[15px] font-semibold text-neutral-900 line-clamp-1">{merchant.name}</div>
                             <div className="text-[12px] text-neutral-500 line-clamp-1">
                               {isDirect ? 'View Book' : 'Visit Store'}
                             </div>
@@ -773,6 +918,13 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
           </>
         )}
       </BottomSheet>
+
+      {/* Liked Prompt */}
+      {showLikedPrompt && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[3000] px-4 py-2 rounded-xl bg-orange-500 text-white font-semibold shadow-lg transition-all">
+          Added to your Bookshelf!
+        </div>
+      )}
     </>
   );
 }

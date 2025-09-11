@@ -4,7 +4,7 @@ const Section = ({ title, id, children, className = '', show = true, actionSlot 
   return (
     <section
       aria-labelledby={`${id}-label`}
-      className={`w-full max-w-6xl mx-auto px-4  mb-8 ${className}`}
+      className={`w-full max-w-6xl mx-auto px-2  mb-8 ${className}`}
     >
       <div className="flex items-center justify-between mb-3">
         <h2 id={`${id}-label`} className="text-lg font-bold tracking-wide text-neutral-900">
