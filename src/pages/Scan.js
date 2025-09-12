@@ -480,9 +480,10 @@ export default function Scan({ setShowTabBar, setShowHeader }) {
   /* ------------------------------ Navigation ------------------------------ */
 
   function confirmAndGo(book) {
-    // Pass the selected book to Discover page as lead book (same as Home.js)
+    // Normalize book object before passing
+    const normalizedBook = normalizeAny(book);
     navigate('/discover', {
-      state: { book }, // Only pass the book object
+      state: { book: normalizedBook },
       replace: false,
     });
   }

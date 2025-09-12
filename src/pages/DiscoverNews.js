@@ -243,13 +243,15 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
       const navBook = location.state.book;
       setSelectedBook(navBook);
       setBooks(prev => {
+        // Remove duplicate if already present
         const filtered = (prev || []).filter(b => b.id !== navBook.id);
+        // Insert navBook at the top
         return [navBook, ...filtered];
       });
       setOpenSheet(true);
-      navigate('.', { replace: true, state: null });
+      navigate('.', { replace: true, state: null }); // Clear nav state
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line
   }, [location.state]);
 
   /* ======================= AI: teasers for visibleBooks ======================= */
