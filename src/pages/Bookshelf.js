@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { apiCall } from '../utils/api';
 import AuthorSpotlight from '../components/AuthorSpotlight';
 import AuthorBooksModal from '../components/AuthorBooksModal';
+import ShelfGrid from '../components/ShelfGrid';
+import { handleBookClick } from '../utils/navigation';
 
 /* ============================ LocalStorage helpers ============================ */
 function safeParse(json, fallback) {
@@ -11,50 +13,31 @@ function safeParse(json, fallback) {
 }
 function getLocalLikes() {
   const ids = safeParse(localStorage.getItem('likedBooks'), []);
-  // De-dup and keep truthy
   return Array.from(new Set((ids || []).filter(Boolean)));
 }
 function getBookData(bookId) {
   return safeParse(localStorage.getItem(`bookData:${bookId}`), {});
 }
-function getLikedBooks() {
-  try {
-    return JSON.parse(localStorage.getItem('likedBooks') || '[]');
-  } catch {
-    return [];
-  }
+function getRecentlyOpened() {
+  return safeParse(localStorage.getItem('recentlyOpenedBooks'), []);
+}
+function getReadingProgress() {
+  return safeParse(localStorage.getItem('readingProgress'), {});
 }
 
 /* ============================ Normalization helpers =========================== */
-// Turn any categories/genres shape into a clean array of labels
 function getNormalizedGenres(book) {
-  // Priority: _genre (your synthetic), then genres, then categories
   let raw = book?._genre ?? book?.genres ?? book?.categories ?? [];
-  // If it’s a string, split on common separators
   if (typeof raw === 'string') {
-    raw = raw
-      .split(/[,/|;>]+/g)
-      .map(s => s.trim())
-      .filter(Boolean);
+    raw = raw.split(/[,/|;>]+/g).map(s => s.trim()).filter(Boolean);
   }
-  // If it’s not an array, make it one
   if (!Array.isArray(raw)) raw = [raw].filter(Boolean);
-
-  // Tidy: collapse whitespace, title-case-ish, drop very long labels
   const cleaned = raw
     .map(x => (x ?? '').toString().trim())
     .filter(Boolean)
     .map(label => label.length > 80 ? label.slice(0, 80) + '…' : label)
     .map(label => label.charAt(0).toUpperCase() + label.slice(1));
-
   return cleaned.length ? cleaned : ['Other'];
-}
-
-function titleCase(s) {
-  return (s ?? '')
-    .toString()
-    .toLowerCase()
-    .replace(/\b\w/g, ch => ch.toUpperCase());
 }
 
 function uniqBy(arr, keyFn) {
@@ -70,84 +53,6 @@ function uniqBy(arr, keyFn) {
   return out;
 }
 
-/* ============================ Grouping & Segments ============================= */
-function groupBooksByGenre(books) {
-  const map = new Map();
-  for (const book of books) {
-    const genres = getNormalizedGenres(book);
-    const uniqueGenres = Array.from(new Set(genres)); // avoid double insert
-    for (const g of uniqueGenres) {
-      const key = g || 'Other';
-      if (!map.has(key)) map.set(key, []);
-      map.get(key).push(book);
-    }
-  }
-  // Sort each shelf a touch (optional: by rating, recency, etc.)
-  for (const [k, arr] of map) {
-    map.set(k, uniqBy(arr, b => b.id)); // de-dupe by id inside a shelf
-  }
-  return map;
-}
-
-function pickTopAuthors(books, minCount = 2, limit = 3) {
-  const byAuthor = new Map();
-  for (const b of books) {
-    const a = (b.author || 'Unknown').trim();
-    if (!byAuthor.has(a)) byAuthor.set(a, []);
-    byAuthor.get(a).push(b);
-  }
-  const clusters = [...byAuthor.entries()]
-    .filter(([, list]) => list.length >= minCount && (list[0]?.author || 'Unknown') !== 'Unknown')
-    .sort((a, b) => b[1].length - a[1].length) // most books first
-    .slice(0, limit);
-  return clusters;
-}
-
-function ShelfGrid({ books = [], onBookClick }) {
-  if (!books.length) return null;
-  return (
-    <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 gap-1">
-      {books.map((book, idx) => (
-        <button
-          key={book.id || idx}
-          onClick={() => onBookClick?.(book)}
-          className="group block w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 rounded-2xl"
-          title={`${book.title}${book.author ? ' — ' + book.author : ''}`}
-          aria-label={`Open ${book.title} by ${book.author || 'Unknown'}`}
-        >
-          <div
-            className="relative w-full rounded-2xl overflow-hidden shadow-md ring-1 ring-black/5 bg-neutral-200"
-            style={{ paddingTop: '150%' }} // 2:3 aspect ratio
-          >
-            {book.coverImage ? (
-              <img
-                src={book.coverImage}
-                alt={book.title}
-                loading="lazy"
-                onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/fallback-cover.png'; }}
-                className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-              />
-            ) : (
-              <div className="absolute inset-0 w-full h-full flex items-center justify-center text-neutral-400 text-xs bg-neutral-200">
-                No Image
-              </div>
-            )}
-            <div className="absolute inset-x-0 bottom-0 p-2 pt-10 bg-gradient-to-t from-black/75 via-black/30 to-transparent">
-              <h3 className="text-white text-[13px] font-semibold leading-tight line-clamp-2">
-                {book.title}
-              </h3>
-              {book.author && (
-                <p className="text-white/80 text-[11px] line-clamp-1">{book.author}</p>
-              )}
-            </div>
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-gradient-to-b from-white/10 to-transparent" />
-          </div>
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function uniqAuthors(books) {
   const seen = new Set();
   return books
@@ -155,29 +60,62 @@ function uniqAuthors(books) {
     .filter(a => a && !seen.has(a) && seen.add(a));
 }
 
+/* ============================ Grouping & Segments ============================= */
+function groupBooksByGenre(books) {
+  const map = new Map();
+  for (const book of books) {
+    const genres = getNormalizedGenres(book);
+    const uniqueGenres = Array.from(new Set(genres));
+    for (const g of uniqueGenres) {
+      const key = g || 'Other';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(book);
+    }
+  }
+  for (const [k, arr] of map) {
+    map.set(k, uniqBy(arr, b => b.id));
+  }
+  return map;
+}
+
 /* ================================ Page ======================================= */
 export default function Bookshelf() {
   const navigate = useNavigate();
+
   const [showAllGenre, setShowAllGenre] = useState(null);
-  const [likedBooks, setLikedBooks] = useState([]);
-  const [authorData, setAuthorData] = useState({}); // { author: { bio, books } }
-  const [authorModal, setAuthorModal] = useState({
-    open: false,
-    author: null,
-    data: null,
-  });
+  const [likedIds, setLikedIds] = useState(getLocalLikes());
+  const [books, setBooks] = useState([]);
+  const [authorData, setAuthorData] = useState({});
+  const [authorModal, setAuthorModal] = useState({ open: false, author: null, data: null });
+  const [recentlyOpened, setRecentlyOpened] = useState(getRecentlyOpened());
+  const [readingProgress, setReadingProgress] = useState(getReadingProgress());
 
   useEffect(() => {
-    try {
-      setLikedBooks(JSON.parse(localStorage.getItem('likedBooks') || '[]'));
-    } catch {
-      setLikedBooks([]);
-    }
+    const ids = getLocalLikes();
+    const raw = ids.map(getBookData).filter(b => b && b.id);
+    setLikedIds(ids);
+    setBooks(uniqBy(raw, b => b.id));
   }, []);
 
-  // Fetch author bios and books for unique authors
   useEffect(() => {
-    const authors = uniqAuthors(likedBooks);
+    const onStorage = () => {
+      setLikedIds(getLocalLikes());
+      const raw = getLocalLikes().map(getBookData).filter(b => b && b.id);
+      setBooks(uniqBy(raw, b => b.id));
+      setRecentlyOpened(getRecentlyOpened());
+      setReadingProgress(getReadingProgress());
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  useEffect(() => {
+    const raw = likedIds.map(getBookData).filter(b => b && b.id);
+    setBooks(uniqBy(raw, b => b.id));
+  }, [likedIds]);
+
+  useEffect(() => {
+    const authors = uniqAuthors(books);
     authors.forEach(async (author) => {
       if (authorData[author]) return;
       try {
@@ -194,94 +132,52 @@ export default function Bookshelf() {
           }
         }));
       } catch {
-        setAuthorData(prev => ({
-          ...prev,
-          [author]: { bio: '', books: [] }
-        }));
+        setAuthorData(prev => ({ ...prev, [author]: { bio: '', books: [] } }));
       }
     });
-    // eslint-disable-next-line
-  }, [likedBooks]);
-
-  // Listen for changes to likedBooks in localStorage
-  useEffect(() => {
-    const onStorage = () => setLikedBooks(getLikedBooks());
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [books]);
 
   useEffect(() => {
-    setLikedBooks(getLikedBooks());
-  }, []);
-
-  const likedIds = getLocalLikes();
-
-  // Build book list safely, unique by id, and prefer filled data
-  const books = useMemo(() => {
-    const raw = likedIds.map(getBookData).filter(b => b && b.id);
-    return uniqBy(raw, b => b.id);
-  }, [likedIds]);
+    console.log('Liked IDs:', likedIds);
+    console.log('Hydrated books:', books);
+  }, [likedIds, books]);
 
   const groupedMap = useMemo(() => groupBooksByGenre(books), [books]);
   const grouped = useMemo(() => Object.fromEntries(groupedMap), [groupedMap]);
+  const totalGenres = Object.keys(grouped || {}).length;
 
-  // “You may also like”: mix of same-genre sampling + random fallback
-  const youMayLike = useMemo(() => {
-    if (!books.length) return [];
-    // Try: sample up to 8 from the largest genre cluster
-    const biggest = [...groupedMap.entries()].sort((a, b) => b[1].length - a[1].length)[0]?.[1] ?? [];
-    const pool = biggest.length >= 4 ? biggest : books;
-    const copy = [...pool];
-    for (let i = copy.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [copy[i], copy[j]] = [copy[j], copy[i]];
-    }
-    return uniqBy(copy, b => b.id).slice(0, 8);
-  }, [books, groupedMap]);
+  const topGenres = useMemo(() => {
+    const rows = Array.from(groupedMap.entries()).map(([name, arr]) => ({ name, count: arr.length }));
+    return rows.sort((a, b) => b.count - a.count).slice(0, 8);
+  }, [groupedMap]);
 
-  // Extra curated sections (add "life")
-  const shortReads = useMemo(
-    () => books.filter(b => (b.pageCount ?? 0) > 0 && b.pageCount <= 240).slice(0, 16),
-    [books]
-  );
-  const highlyRated = useMemo(
-    () => books
-      .filter(b => (b.averageRating ?? 0) >= 4.2 || (b.ratingsCount ?? 0) >= 500)
-      .slice(0, 16),
-    [books]
-  );
-  const newerReleases = useMemo(() => {
-    // Try parse publishedDate like "2019-03-01" or "2019"
-    function yearOf(b) {
-      const d = (b.publishedDate || '').toString();
-      const m = d.match(/\d{4}/);
-      return m ? parseInt(m[0], 10) : 0;
-    }
-    return books
-      .map(b => ({ b, y: yearOf(b) }))
-      .filter(({ y }) => y >= 2018)
-      .sort((a, z) => z.y - a.y)
-      .map(({ b }) => b)
-      .slice(0, 16);
-  }, [books]);
+  const totalLiked = books.length;
+  const totalAuthors = uniqAuthors(books).length;
 
-  const authorClusters = useMemo(() => pickTopAuthors(books, 2, 3), [books]);
-
-  // Author modal handlers
   const handleOpenAuthor = (authorName, info) => {
     setAuthorModal({ open: true, author: authorName, data: info || {} });
   };
+  const handleCloseAuthor = () => setAuthorModal({ open: false, author: null, data: null });
 
-  const handleCloseAuthor = () => {
-    setAuthorModal({ open: false, author: null, data: null });
+  const fetchAuthorBooks = async (authorName) => {
+    try {
+      const res = await apiCall(`/api/books/author-books/${encodeURIComponent(authorName)}`, { method: 'GET' });
+      const items = Array.isArray(res.data?.books) ? res.data.books : [];
+      setAuthorData(prev => ({
+        ...prev,
+        [authorName]: { ...(prev[authorName] || {}), books: items }
+      }));
+      return items;
+    } catch {
+      return [];
+    }
   };
 
-  console.log('likedBooks:', likedBooks);
-  console.log('authorData:', authorData);
+  const goDiscover = () => navigate('/discover');
 
-  /* ========================== Show-all for a single genre ========================== */
   if (showAllGenre) {
-    const genreBooks = grouped[showAllGenre] || [];
+    const genreBooks = (grouped && grouped[showAllGenre]) ? grouped[showAllGenre] : [];
     return (
       <div className="min-h-screen w-full flex flex-col bg-white text-black px-4 py-4">
         <div className="flex items-center mb-4">
@@ -296,87 +192,208 @@ export default function Bookshelf() {
           <h2 className="text-2xl font-extrabold tracking-tight">{showAllGenre}</h2>
         </div>
         <ShelfGrid
-          books={genreBooks}
-          onBookClick={book => navigate('/discover', { state: { book } })}
+          books={books.filter(b => genreBooks.some(gb => gb.id === b.id))}
+          emptyMessage={`No books found in ${showAllGenre}.`}
+          onBookClick={book => handleBookClick(navigate, book)}
         />
       </div>
     );
   }
 
-  /* ================================= Render =================================== */
   return (
-    <div className="min-h-screen w-full flex flex-col bg-white text-black px-4 py-4">
-      {/* Header */}
-      <div className="mx-auto w-full max-w-6xl mb-4">
-        <div className="flex items-center justify-between rounded-2xl bg-white/80 backdrop-blur ring-1 ring-black/5 px-3 py-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="inline-flex items-center justify-center w-10 h-10 rounded-xl text-white shadow-md ring-1 ring-white/20 bg-gradient-to-br from-amber-400 to-orange-500">
-              <svg viewBox="0 0 24 24" className="w-5 h-5 text-white/90" aria-hidden="true">
-                <path d="M3 5h14a2 2 0 0 1 2 2v10H5a2 2 0 0 1-2-2V5Z" className="fill-current opacity-90"/>
-                <path d="M7 5v12M11 5v12M15 5v12" className="stroke-white/90" strokeWidth="1.6" fill="none" />
-              </svg>
-            </span>
+    <div className="min-h-screen w-full flex flex-col bg-white text-black">
+      <div className="relative px-4 pt-6 pb-4">
+        <div className="mx-auto w-full max-w-6xl rounded-3xl p-5 shadow-[0_6px_30px_rgba(0,0,0,0.06)] ring-1 ring-black/5 bg-gradient-to-br from-orange-50 via-white to-amber-50">
+          <div className="flex items-center justify-between">
             <div className="min-w-0">
-              <h1 className="text-xl font-extrabold tracking-tight text-neutral-900 truncate">Bookshelf</h1>
-              <p className="text-[11px] text-neutral-500">Your liked books live here</p>
+              <h1 className="text-xl font-extrabold tracking-tight text-neutral-900 truncate">Your Bookshelf</h1>
+              <p className="text-[11px] text-neutral-500">Saved & liked — tap any book to jump back into Discover</p>
             </div>
+            <button
+              onClick={goDiscover}
+              className="shrink-0 inline-flex items-center gap-2 rounded-full bg-orange-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-orange-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300"
+              title="Go to Discover"
+            >
+              Discover
+              <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
+                <path d="M9 6l6 6-6 6" className="stroke-current" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
           </div>
+
+          <div className="mt-4 grid grid-cols-3 divide-x divide-neutral-200 rounded-xl bg-white/70 backdrop-blur p-2 ring-1 ring-black/5">
+            <Stat label="Liked" value={totalLiked} />
+            <Stat label="Authors" value={totalAuthors} />
+            <Stat label="Genres" value={totalGenres} />
+          </div>
+
+          {topGenres.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {topGenres.map(g => (
+                <button
+                  key={g.name}
+                  onClick={() => setShowAllGenre(g.name)}
+                  className="px-3 py-1.5 rounded-full bg-neutral-900/90 text-white text-xs font-semibold shadow-sm hover:bg-black"
+                  title={`Open ${g.name}`}
+                >
+                  {g.name} <span className="opacity-80">• {g.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
-      {likedBooks.length === 0 ? (
-        <div className="text-center text-neutral-400 mt-8">
-          No books in your bookshelf yet.<br />
-          <span className="text-xs text-neutral-500 mt-1">Like books in Discover to add them here.</span>
-        </div>
-      ) : (
-        <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 gap-4 mb-10">
-          {likedBooks.map((book, idx) => (
-            <div key={book.id || idx} className="cursor-pointer flex flex-col items-center hover:scale-105 transition-transform duration-200 bg-white rounded-lg p-3">
-              {book.coverImage ? (
-                <img
-                  src={book.coverImage}
-                  alt={book.title}
-                  loading="lazy"
-                  onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = '/fallback-cover.png'; }}
-                  className="w-24 h-36 object-cover rounded shadow mb-2"
-                />
-              ) : (
-                <div className="w-24 h-36 flex items-center justify-center bg-gray-200 rounded shadow text-xs text-gray-400 mb-2">
-                  No Image
-                </div>
-              )}
-              <div className="font-bold text-black text-sm text-center truncate w-full" title={book.title}>
-                {book.title}
-              </div>
-              {book.author && (
-                <div className="text-neutral-400 text-xs text-center truncate w-full" title={book.author}>
-                  {book.author}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-        
-      )}
-      {/* Author Spotlight */}
-      <AuthorSpotlight
-        likedBooks={likedBooks}
-        authorData={authorData}
-        navigate={navigate}
-        onOpenAuthor={handleOpenAuthor}
-      />
 
-      {/* Author Books Modal */}
-      <AuthorBooksModal
-        open={authorModal.open}
-        author={authorModal.author}
-        data={authorModal.data}
-        onClose={handleCloseAuthor}
-        navigate={navigate}
-      />
-      
+      {recentlyOpened?.length > 0 && (
+        <section className="px-4">
+          <SectionHeader title="Recently Opened" />
+          <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-1">
+            {recentlyOpened.map((b, idx) => (
+              <button
+                key={b.id || idx}
+                className="snap-start shrink-0 w-28 rounded-xl bg-white ring-1 ring-black/5 shadow hover:shadow-md transition-all overflow-hidden text-left"
+                onClick={() => handleBookClick(navigate, b)}
+                title={`${b.title} — ${b.author}`}
+              >
+                <div className="relative w-full" style={{ aspectRatio: '2/3' }}>
+                  <img
+                    src={b.coverImage || '/fallback-cover.png'}
+                    alt={b.title}
+                    className="absolute inset-0 w-full h-full object-cover"
+                    onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/fallback-cover.png'; }}
+                  />
+                </div>
+                <div className="p-2">
+                  <div className="text-[12px] font-semibold line-clamp-2">{b.title}</div>
+                  <div className="text-[10px] text-neutral-500 line-clamp-1">{b.author}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div className="mt-5 space-y-6 px-2">
+        {Object.entries(grouped || {}).map(([genre, items]) => {
+          if (!items?.length) return null;
+          return (
+            <section key={genre} className="px-2">
+              <SectionHeader
+                title={genre}
+                actionLabel="See all"
+                onAction={() => setShowAllGenre(genre)}
+              />
+              <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-1">
+                {items.slice(0, 12).map(book => (
+                  <button
+                    key={book.id}
+                    onClick={() => handleBookClick(navigate, book)}
+                    className="snap-start shrink-0 w-28 rounded-xl bg-white ring-1 ring-black/5 shadow hover:shadow-md transition-all overflow-hidden text-left"
+                    title={`${book.title} — ${book.author || 'Unknown'}`}
+                    aria-label={`Open ${book.title}`}
+                  >
+                    <div className="relative w-full" style={{ aspectRatio: '2/3' }}>
+                      <img
+                        src={book.coverImage || '/fallback-cover.png'}
+                        alt={book.title}
+                        className="absolute inset-0 w-full h-full object-cover"
+                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/fallback-cover.png'; }}
+                      />
+                      <div className="absolute inset-x-0 bottom-0 p-2 pt-8 bg-gradient-to-t from-black/80 via-black/30 to-transparent">
+                        <div className="text-white text-[11px] font-semibold leading-tight line-clamp-2">{book.title}</div>
+                        {book.author && <div className="text-white/80 text-[10px] leading-tight line-clamp-1">{book.author}</div>}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+
+      {books.length > 0 && (
+        <div className="px-4 mt-6">
+          <AuthorSpotlight
+            likedBooks={books}
+            authorData={authorData}
+            navigate={navigate}
+            onOpenAuthor={handleOpenAuthor}
+            fetchAuthorBooks={fetchAuthorBooks}
+          />
+        </div>
+      )}
+
+      {books.length === 0 && (
+        <div className="px-4 py-10 text-center">
+          <div className="mx-auto w-full max-w-md rounded-3xl p-8 bg-neutral-50 ring-1 ring-black/5">
+            <div className="text-2xl font-extrabold">Your shelf is empty</div>
+            <p className="mt-2 text-sm text-neutral-600">Save books you love, then come back here to manage them.</p>
+            <button
+              onClick={goDiscover}
+              className="mt-4 inline-flex items-center gap-2 rounded-full bg-orange-600 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-orange-700"
+            >
+              Discover books
+              <svg viewBox="0 0 24 24" className="w-4 h-4"><path d="M9 6l6 6-6 6" className="stroke-current" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {authorModal.open && (
+        <AuthorBooksModal
+          isOpen={authorModal.open}
+          author={authorModal.author}
+          books={authorModal.data?.books || []}
+          onClose={handleCloseAuthor}
+          onBookClick={book => handleBookClick(navigate, book)}
+        />
+      )}
+
+      {books.length > 0 && (
+        <div
+          className="sticky bottom-3 self-center w-[calc(100%-1.5rem)] max-w-3xl px-3"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        >
+          <div className="rounded-2xl bg-neutral-900 text-white shadow-xl ring-1 ring-black/10 flex items-center justify-between px-4 py-3">
+            <div className="text-[13px]">
+              <span className="font-semibold">Want more like these?</span> Explore fresh picks in Discover.
+            </div>
+            <button
+              onClick={goDiscover}
+              className="ml-3 inline-flex items-center gap-2 rounded-full bg-white text-neutral-900 px-3 py-1.5 text-xs font-semibold hover:bg-neutral-100"
+            >
+              Open Discover
+              <svg viewBox="0 0 24 24" className="w-4 h-4"><path d="M9 6l6 6-6 6" className="stroke-current" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
-    
   );
-  
+}
+
+function Stat({ label, value }) {
+  return (
+    <div className="px-3 py-2 text-center">
+      <div className="text-xl font-extrabold tracking-tight">{value ?? 0}</div>
+      <div className="text-[11px] text-neutral-500">{label}</div>
+    </div>
+  );
+}
+
+function SectionHeader({ title, actionLabel, onAction }) {
+  return (
+    <div className="flex items-center justify-between mb-2 px-1">
+      <h2 className="text-lg font-extrabold tracking-tight">{title}</h2>
+      {actionLabel && onAction && (
+        <button
+          onClick={onAction}
+          className="text-xs font-semibold text-orange-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 rounded"
+        >
+          {actionLabel}
+        </button>
+      )}
+    </div>
+  );
 }

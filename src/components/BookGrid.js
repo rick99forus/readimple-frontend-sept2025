@@ -27,7 +27,7 @@ export default function BookGrid({
         <div
           key={book.id || idx}
           className="cursor-pointer flex flex-col items-center hover:scale-105 transition-transform duration-200 bg-white rounded-lg p-3"
-          onClick={() => onBookClick?.(book)}
+          onClick={() => onBookClick(book)}
         >
           {book.coverImage ? (
             <img

@@ -56,7 +56,6 @@ export default function BookCarousel({ books = [], onBookClick }) {
         {infiniteBooks.map((book, idx) => (
           <div
             key={`${book.id}-${idx}`}
-            className="w-32 flex-shrink-0 hover:scale-105 transition-transform duration-200 cursor-pointer outline-none"
             onClick={() => onBookClick(book)}
             tabIndex={0}
             aria-label={`Book: ${book.title} by ${book.author || 'Unknown'}`}

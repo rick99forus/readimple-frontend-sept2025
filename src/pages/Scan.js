@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiCall } from '../utils/api';
 import { BrowserMultiFormatReader } from '@zxing/browser';
+import { handleBookClick } from '../utils/navigation';
 
 /* ------------------------------------------------------------------ */
 /*                          Helper utilities                           */
@@ -69,11 +70,6 @@ const CAMERA_PERMISSION_KEY = 'camera_permission_v2';
 
 export default function Scan({ setShowTabBar, setShowHeader }) {
   const navigate = useNavigate();
-
-  const handleScanResult = (book) => {
-    if (!book) return;
-    navigate('/discover', { state: { book } });
-  };
 
   // UI state
   const [error, setError] = useState('');
@@ -479,15 +475,6 @@ export default function Scan({ setShowTabBar, setShowHeader }) {
 
   /* ------------------------------ Navigation ------------------------------ */
 
-  function confirmAndGo(book) {
-    // Normalize book object before passing
-    const normalizedBook = normalizeAny(book);
-    navigate('/discover', {
-      state: { book: normalizedBook },
-      replace: false,
-    });
-  }
-
   const resumeScan = async () => {
     setConfirmOpen(false);
     setCandidates([]);
@@ -710,7 +697,7 @@ export default function Scan({ setShowTabBar, setShowHeader }) {
                         </div>
                       </div>
                       <button
-                        onClick={() => confirmAndGo(b)}
+                        onClick={() => handleBookClick(navigate, b)}
                         className="px-3 py-1.5 rounded-full bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600 active:scale-[0.98]"
                       >
                         This one

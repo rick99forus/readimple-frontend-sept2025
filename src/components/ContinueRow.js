@@ -22,25 +22,14 @@ const ContinueRow = ({ onClick }) => {
   while (display.length < EMPTY_SLOTS) display.push(null);
 
   return (
-    <div
-      className="flex gap-4 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-1"
-      style={{
-        WebkitMaskImage:
-          'linear-gradient(to right, transparent, black 8px, black calc(100% - 8px), transparent)',
-        maskImage:
-          'linear-gradient(to right, transparent, black 8px, black calc(100% - 8px), transparent)',
-      }}
-      aria-label="Continue reading"
-    >
-      {display.map((item, idx) =>
-        item ? (
-          <article key={item.id || idx} className="flex-shrink-0 snap-start w-32">
-            <button
-              onClick={() => onClick?.(item)}
-              className="group block text-left w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 rounded-2xl"
-              aria-label={`Resume ${item.title} by ${item.author}`}
-              title={`${item.title} — ${item.author}`}
-            >
+    <div className="flex gap-4 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-1">
+      {display.map((item, idx) => (
+        <article key={item?.id || idx} className="flex-shrink-0 snap-start w-32">
+          <button
+            onClick={() => onClick?.(item)}
+            className="group block w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 rounded-2xl"
+          >
+            {item ? (
               <div className="relative w-full h-52 rounded-2xl overflow-hidden shadow-md ring-1 ring-black/5 bg-neutral-200">
                 {/* Cover */}
                 <img
@@ -74,30 +63,24 @@ const ContinueRow = ({ onClick }) => {
                 {/* Subtle top sheen */}
                 <div className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-gradient-to-b from-white/10 to-transparent" />
               </div>
-            </button>
-          </article>
-        ) : (
-          <article
-            key={`empty-${idx}`}
-            className="flex-shrink-0 snap-start w-32"
-            aria-hidden="true"
-          >
-            <div className="relative w-full h-52 rounded-2xl border border-dashed border-neutral-300 bg-neutral-50/80 ring-1 ring-black/5">
-              <div className="absolute inset-0 flex flex-col items-center justify-center p-3 text-neutral-400">
-                <div className="w-10 h-10 rounded-xl bg-neutral-200 flex items-center justify-center mb-2 shadow-inner">
-                  {/* Plus icon */}
-                  <svg viewBox="0 0 24 24" className="w-5 h-5">
-                    <path d="M12 5v14M5 12h14" className="stroke-current" strokeWidth="2" />
-                  </svg>
+            ) : (
+              <div className="relative w-full h-52 rounded-2xl border border-dashed border-neutral-300 bg-neutral-50/80 ring-1 ring-black/5">
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-3 text-neutral-400">
+                  <div className="w-10 h-10 rounded-xl bg-neutral-200 flex items-center justify-center mb-2 shadow-inner">
+                    {/* Plus icon */}
+                    <svg viewBox="0 0 24 24" className="w-5 h-5">
+                      <path d="M12 5v14M5 12h14" className="stroke-current" strokeWidth="2" />
+                    </svg>
+                  </div>
+                  <p className="text-[11px] text-center leading-snug">
+                    Open a book to continue
+                  </p>
                 </div>
-                <p className="text-[11px] text-center leading-snug">
-                  Open a book to continue
-                </p>
               </div>
-            </div>
-          </article>
-        )
-      )}
+            )}
+          </button>
+        </article>
+      ))}
     </div>
   );
 };

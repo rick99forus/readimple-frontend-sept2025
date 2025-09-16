@@ -1,18 +1,16 @@
-// filepath: /Users/rcoding/Desktop/Ready/testing/readimple-app/frontend/src/components/skeletons/ContinueRowSkeleton.js
 import React from 'react';
-import { Rect } from './GenericSkeleton';
+import './ContinueRowSkeleton.css'; // Optional: Add styles for skeleton
 
-export default function ContinueRowSkeleton() {
-  return (
-    <div className="flex gap-4 overflow-hidden">
-      {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className="w-36">
-          <Rect className="w-full h-48 mb-2" />
-            <Rect className="w-3/4 h-4 mb-1" />
-          <Rect className="w-1/2 h-3 mb-2" />
-          <Rect className="w-full h-2" />
+const ContinueRowSkeleton = () => {
+    return (
+        <div className="continue-row-skeleton">
+            <div className="skeleton-thumbnail"></div>
+            <div className="skeleton-content">
+                <div className="skeleton-title"></div>
+                <div className="skeleton-subtitle"></div>
+            </div>
         </div>
-      ))}
-    </div>
-  );
-}
+    );
+};
+
+export default ContinueRowSkeleton;

@@ -1,5 +1,6 @@
 // filepath: src/components/GreetingBar.js
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 /* ---------- Tiny, crisp SVG icons (currentColor) ---------- */
 const IconSunrise = ({ className = 'w-5 h-5' }) => (
@@ -42,10 +43,16 @@ const IconMoon = ({ className = 'w-5 h-5' }) => (
 );
 
 /* Pencil/edit icon — sized down to fit the compact chip buttons */
-const IconEdit = ({ className = 'w-3.5 h-3.5' }) => (
+const IconPencil = ({ className = 'w-4 h-4' }) => (
   <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-    <path d="M3 17.25V21h3.75L19.81 7.94l-3.75-3.75L3 17.25Z" fill="currentColor" />
-    <path d="M20.71 6.04a1 1 0 0 0 0-1.41l-1.34-1.34a1 1 0 0 0-1.41 0l-1.13 1.13L19.58 7.17l1.13-1.13Z" fill="currentColor" />
+    <path
+      d="M4 21h4.586a1 1 0 0 0 .707-.293l11.414-11.414a1 1 0 0 0 0-1.414-1.414L8.293 18.293A1 1 0 0 1 8 19.586V21a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1Z"
+      fill="currentColor"
+    />
+    <path
+      d="M19.707 4.293a1 1 0 0 0-1.414 0L15.586 7l1.414 1.414 2.707-2.707a1 1 0 0 0 0-1.414Z"
+      fill="currentColor"
+    />
   </svg>
 );
 
@@ -82,24 +89,24 @@ function getTimeTheme() {
 }
 
 /* ---------- Component ---------- */
-const GreetingBar = ({ name, onEditName }) => {
-  const [displayName, setDisplayName] = useState(name || '');
-  const { greeting, gradient, Icon } = getTimeTheme();
+const GreetingBar = ({  }) => {
+  const [displayName, setDisplayName] = useState('');
+  const navigate = useNavigate();
 
   useEffect(() => {
     const stored = localStorage.getItem('displayName') || '';
-    if (!name && stored) setDisplayName(stored);
-  }, [name]);
+    setDisplayName(stored);
+    // Listen for changes from Profile
+    const onStorage = () => setDisplayName(localStorage.getItem('displayName') || '');
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   const handleEdit = () => {
-    const current = localStorage.getItem('displayName') || displayName || '';
-    const updated = window.prompt('Enter your display name', current);
-    if (updated == null) return; // cancelled
-    const trimmed = updated.trim();
-    setDisplayName(trimmed);
-    localStorage.setItem('displayName', trimmed);
-    onEditName && onEditName(trimmed);
+    navigate('/profile');
   };
+
+  const { greeting, gradient, Icon } = getTimeTheme();
 
   return (
     <div className="w-full">
@@ -127,22 +134,11 @@ const GreetingBar = ({ name, onEditName }) => {
             {/* Text pill on sm+ */}
             <button
               onClick={handleEdit}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-neutral-800 bg-neutral-100 hover:bg-neutral-200 ring-1 ring-black/5 focus:outline-none focus:ring-2 focus:ring-orange-300"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-neutral-800 bg-neutral-100 hover:bg-neutral-200 ring-1 ring-black/5 focus:outline-none focus:ring-2 focus:ring-orange-300"
               aria-label="Edit display name"
-              title="Edit display name"
+              title="Edit profile"
             >
-              <IconEdit className="w-3.5 h-3.5" />
-              Edit name
-            </button>
-
-            {/* Icon-only on xs — button & icon both slightly smaller than before */}
-            <button
-              onClick={handleEdit}
-              className="sm:hidden inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white text-neutral-700 border border-neutral-200 hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-orange-300"
-              aria-label="Edit display name"
-              title="Edit name"
-            >
-              <IconEdit className="w-3.5 h-3.5" />
+              Edit Profile
             </button>
           </div>
         </div>

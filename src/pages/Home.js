@@ -8,39 +8,14 @@ import ContinueRow from '../components/ContinueRow';
 import ContinueRowSkeleton from '../components/skeletons/ContinueRowSkeleton';
 import { apiCall, fetchWithCache } from '../utils/api';
 import BookGrid from '../components/BookGrid';
+import { GENRE_GRADIENTS } from '../constants/appConstants';
+import { handleBookClick } from '../utils/navigation';
 
 const ALL_GENRES = [
   'fiction', 'fantasy', 'sci-fi', 'romance', 'mystery', 'biography', 'thriller', 'horror', 'adventure', 'poetry',
   'children', 'self-help', 'history', 'science', 'classic', 'memoir', 'crime', 'psychology', 'philosophy',
   'spirituality', 'business', 'graphic novel', 'dystopian'
 ];
-
-const GENRE_GRADIENTS = {
-  fiction: 'linear-gradient(210deg, #fffbe6 40%, #ffffff 100%)',
-  fantasy: 'linear-gradient(210deg, #f3e8ff 40%, #ffffff 100%)',
-  'sci-fi': 'linear-gradient(210deg, #e0f2fe 40%, #ffffff 100%)',
-  romance: 'linear-gradient(210deg, #fce7f3 40%, #ffffff 100%)',
-  mystery: 'linear-gradient(210deg, #f1f5f9 40%, #ffffff 100%)',
-  biography: 'linear-gradient(210deg, #d1fae5 40%, #ffffff 100%)',
-  thriller: 'linear-gradient(210deg, #fee2e2 40%, #ffffff 100%)',
-  horror: 'linear-gradient(210deg, #fee2e2 40%, #ffffff 100%)',
-  adventure: 'linear-gradient(210deg, #fef3c7 40%, #ffffff 100%)',
-  poetry: 'linear-gradient(210deg, #f0fdf4 40%, #ffffff 100%)',
-  children: 'linear-gradient(210deg, #ecfdf5 40%, #ffffff 100%)',
-  'self-help': 'linear-gradient(210deg, #f0f9ff 40%, #ffffff 100%)',
-  history: 'linear-gradient(210deg, #fef9c3 40%, #ffffff 100%)',
-  science: 'linear-gradient(210deg, #e0f2fe 40%, #ffffff 100%)',
-  classic: 'linear-gradient(210deg, #f1f5f9 40%, #ffffff 100%)',
-  memoir: 'linear-gradient(210deg, #d1fae5 40%, #ffffff 100%)',
-  crime: 'linear-gradient(210deg, #fee2e2 40%, #ef4444 100%)',
-  psychology: 'linear-gradient(210deg, #f0fdf4 40%, #ffffff 100%)',
-  philosophy: 'linear-gradient(210deg, #fef9c3 40%, #ffffff 100%)',
-  spirituality: 'linear-gradient(210deg, #f3e8ff 40%, #ffffff 100%)',
-  business: 'linear-gradient(210deg, #fefce8 40%, #ffffff 100%)',
-  'graphic novel': 'linear-gradient(210deg, #f3e8ff 40%, #ffffff 100%)',
-  dystopian: 'linear-gradient(210deg, #f1f5f9 40%, #64748b 100%)',
-  default: 'linear-gradient(210deg, #f8fafc 40%, #ffffff 100%)',
-};
 
 const Home = forwardRef((props, ref) => {
   const [apiError, setApiError] = useState(null);
@@ -118,11 +93,6 @@ const Home = forwardRef((props, ref) => {
       .catch(() => setBrowseRows([]));
   }, []);
 
-  // Pass selected book to Discover
-  const handleBookClick = (book) => {
-    navigate('/discover', { state: { book } });
-  };
-
   if (apiError) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-white text-black">
@@ -140,15 +110,14 @@ const Home = forwardRef((props, ref) => {
     <div className="bg-white text-black min-h-screen">
       <div className="w-full max-w-4xl mx-auto flex flex-col items-start justify-center gap-y-1">
         <GreetingBar onEditName={() => {}} />
-        <HeroSlideshow onBookClick={handleBookClick} />
+        <HeroSlideshow onBookClick={book => handleBookClick(navigate, book)} />
 
         <Section id="continue" title="Continue reading" show={loadingContinue || continueReading.length > 0}>
           {loadingContinue ? <ContinueRowSkeleton /> : (
-            <ContinueRow onClick={handleBookClick} />
+            <ContinueRow onClick={book => handleBookClick(navigate, book)} />
           )}
         </Section>
 
-        {/* Genre BookRows with gradient backgrounds */}
         {loadingGenres ? (
           <div className="w-full text-center py-8 text-gray-400">Loading genres...</div>
         ) : (
@@ -162,7 +131,7 @@ const Home = forwardRef((props, ref) => {
               >
                 <BookRow
                   books={books || []}
-                  onBookClick={handleBookClick}
+                  onBookClick={book => handleBookClick(navigate, book)}
                 />
               </Section>
             </div>
@@ -174,7 +143,7 @@ const Home = forwardRef((props, ref) => {
           ) : (
             <BookGrid
               books={newReleases}
-              onBookClick={handleBookClick}
+              onBookClick={book => handleBookClick(navigate, book)}
               gridCols={2}
               maxRows={3}
             />
@@ -191,7 +160,7 @@ const Home = forwardRef((props, ref) => {
               >
                 <BookRow
                   books={books || []}
-                  onBookClick={handleBookClick}
+                  onBookClick={book => handleBookClick(navigate, book)}
                 />
               </Section>
             </div>

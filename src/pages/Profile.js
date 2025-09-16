@@ -153,7 +153,7 @@ export default function Profile({ setShowTabBar, setShowHeader }) {
       : 0;
   const [avatarIdx, setAvatarIdx] = useState(initialAvatarIdx);
 
-  const [username, setUsername] = useState(initialProfile.username || '');
+  const [username, setUsername] = useState(() => localStorage.getItem('displayName') || '');
   const [bio, setBio] = useState(initialProfile.bio || '');
 
   const [borderColor, setBorderColor] = useState(initialProfile.avatarBorderColor || '#fb923c');
@@ -393,8 +393,10 @@ export default function Profile({ setShowTabBar, setShowHeader }) {
   const handleUsernameChange = (e) => {
     const value = e.target.value;
     setUsername(value);
+    localStorage.setItem('displayName', value);
     persist({ username: value });
-    // optional micro XP for profile edits
+    // Notify GreetingBar via storage event
+    window.dispatchEvent(new Event('storage'));
   };
 
   const handleBioChange = (e) => {

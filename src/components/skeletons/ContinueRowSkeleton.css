@@ -1,0 +1,49 @@
+/* ContinueRowSkeleton.css */
+
+.continue-row-skeleton {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background-color: #f0f0f0;
+    border-radius: 8px;
+    animation: pulse 1.5s infinite ease-in-out;
+}
+
+.continue-row-skeleton .thumbnail {
+    width: 60px;
+    height: 60px;
+    background-color: #e0e0e0;
+    border-radius: 8px;
+}
+
+.continue-row-skeleton .text {
+    flex: 1;
+}
+
+.continue-row-skeleton .text .line {
+    height: 12px;
+    background-color: #e0e0e0;
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+}
+
+.continue-row-skeleton .text .line.short {
+    width: 50%;
+}
+
+.continue-row-skeleton .text .line.long {
+    width: 100%;
+}
+
+@keyframes pulse {
+    0% {
+        background-color: #e0e0e0;
+    }
+    50% {
+        background-color: #d6d6d6;
+    }
+    100% {
+        background-color: #e0e0e0;
+    }
+}

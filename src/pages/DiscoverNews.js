@@ -410,12 +410,14 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
     try {
       const savedRaw = localStorage.getItem('likedBooks') || '[]';
       const saved = JSON.parse(savedRaw);
-      const exists = saved.some(b => b.id === selectedBook?.id);
+      const exists = saved.includes(selectedBook.id);
       let next;
       if (exists) {
-        next = saved.filter(b => b.id !== selectedBook.id);
+        next = saved.filter(id => id !== selectedBook.id);
       } else {
-        next = [{ ...selectedBook }, ...saved].slice(0, 50);
+        next = [selectedBook.id, ...saved].slice(0, 50);
+        // Save full book data for hydration
+        localStorage.setItem('bookData:' + selectedBook.id, JSON.stringify(selectedBook));
         setShowLikedPrompt(true);
         setTimeout(() => setShowLikedPrompt(false), 2000);
       }

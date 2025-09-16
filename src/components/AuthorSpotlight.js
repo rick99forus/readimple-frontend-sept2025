@@ -1,22 +1,7 @@
 // filepath: src/components/AuthorSpotlight.js
 import React from 'react';
 import { useNavigate as useRouterNavigate } from 'react-router-dom';
-
-/**
- * AuthorSpotlight (Mobile-first carousel)
- *
- * Props:
- * - likedBooks: Array<Book>
- * - authorData: Record<authorName, { bio?: string, photo?: string, books?: Book[] }>
- * - navigate: (optional) react-router navigate; if not provided we'll use useNavigate()
- * - onOpenAuthor?: (authorName, authorInfo) => void
- * - fetchAuthorBooks?: async (authorName: string) => Promise<Book[]>
- *
- * Notes:
- * - Shows one author per "slide" on mobile, 2 on md, 3 on lg (responsive).
- * - Lazy loads books for an author (if missing) when their slide comes into view.
- * - No external deps; uses native scroll + scroll-snap + buttons + dots.
- */
+import { handleBookClick } from '../utils/navigation';
 
 function uniq(arr) {
   return Array.from(new Set(arr));
@@ -71,9 +56,9 @@ export default function AuthorSpotlight({
   authorData = {},
   navigate,
   onOpenAuthor,
-  fetchAuthorBooks, // optional async loader per author
+  fetchAuthorBooks, // parent should update authorData when this resolves
 }) {
-  // Move all hooks to the top!
+  // --- hooks first ---
   const internalNavigate = useRouterNavigate();
   const go = navigate || internalNavigate;
 
@@ -84,7 +69,9 @@ export default function AuthorSpotlight({
   }));
 
   const [activeIdx, setActiveIdx] = React.useState(0);
+  const [loadingMap, setLoadingMap] = React.useState({}); // { [author]: true }
   const scrollerRef = React.useRef(null);
+
   const syncActiveFromScroll = useDebouncedCallback(() => {
     const el = scrollerRef.current;
     if (!el) return;
@@ -103,15 +90,29 @@ export default function AuthorSpotlight({
     setActiveIdx(best);
   }, 80);
 
-  // Lazy-load books for author when slide changes
+  // Lazy-load books for author when slide changes (via parent callback)
   React.useEffect(() => {
     const curr = slides[activeIdx];
     if (!curr) return;
     const { name, info } = curr;
     const hasBooks = Array.isArray(info.books) && info.books.length > 0;
-    if (!hasBooks && typeof fetchAuthorBooks === 'function') {
-      fetchAuthorBooks(name).catch(() => {/* no-op */});
+
+    if (!hasBooks && typeof fetchAuthorBooks === 'function' && !loadingMap[name]) {
+      setLoadingMap(prev => ({ ...prev, [name]: true }));
+      let isMounted = true;
+      Promise.resolve(fetchAuthorBooks(name))
+        .catch(() => []) // swallow
+        .finally(() => {
+          if (!isMounted) return;
+          setLoadingMap(prev => {
+            const next = { ...prev };
+            delete next[name];
+            return next;
+          });
+        });
+      return () => { isMounted = false; };
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeIdx, slides, fetchAuthorBooks]);
 
   // Scroll helpers
@@ -131,18 +132,17 @@ export default function AuthorSpotlight({
     if (e.key === 'ArrowLeft')  { e.preventDefault(); goPrev(); }
   };
 
-  // Early returns after hooks
+  // --- early exits AFTER hooks ---
   if (!likedBooks.length) return null;
   if (!authors.length) return null;
 
   return (
-    <section aria-labelledby="author-spotlight-heading" className="mt-4">
+    <section aria-labelledby="author-spotlight-heading" className="mt-6">
       <div className="flex items-center justify-between mb-2 px-1">
         <h2 id="author-spotlight-heading" className="text-xl font-extrabold tracking-tight">
           Author Spotlight
         </h2>
 
-        {/* Arrows (hide if only 1 slide) */}
         {slides.length > 1 && (
           <div className="hidden sm:flex items-center gap-2">
             <button
@@ -178,7 +178,7 @@ export default function AuthorSpotlight({
         onScroll={syncActiveFromScroll}
         className="
           group/carousel
-          grid auto-cols-[80%] sm:auto-cols-[65%] md:auto-cols-[48%] lg:auto-cols-[32%]
+          grid auto-cols-[85%] sm:auto-cols-[65%] md:auto-cols-[48%] lg:auto-cols-[32%]
           grid-flow-col gap-3
           overflow-x-auto overscroll-x-contain
           snap-x snap-mandatory
@@ -192,6 +192,7 @@ export default function AuthorSpotlight({
           const books = Array.isArray(info.books) ? info.books : [];
           const photo = info.photo;
           const bio = typeof info.bio === 'string' ? info.bio : '';
+          const isLoading = !!loadingMap[name];
 
           return (
             <article
@@ -262,10 +263,27 @@ export default function AuthorSpotlight({
                   "
                   aria-label={`Books by ${name || 'author'}`}
                 >
+                  {isLoading && books.length === 0 && (
+                    Array.from({ length: 4 }).map((_, i) => (
+                      <div
+                        key={`skeleton-${i}`}
+                        className="snap-start w-32 h-48 rounded-2xl bg-neutral-100 animate-pulse ring-1 ring-black/5"
+                        style={{ aspectRatio: '2 / 3' }}
+                        aria-hidden="true"
+                      />
+                    ))
+                  )}
+
+                  {!isLoading && books.length === 0 && (
+                    <div className="text-neutral-400 text-xs py-6 px-3">
+                      No books found for this author.
+                    </div>
+                  )}
+
                   {books.slice(0, 12).map((book, bIdx) => (
                     <button
                       key={book.id || `${name}-${bIdx}`}
-                      onClick={() => go('/discover', { state: { book } })}
+                      onClick={() => handleBookClick(go, book)}
                       className="
                         group relative snap-start flex-shrink-0 w-32
                         rounded-2xl overflow-hidden ring-1 ring-black/5 bg-neutral-200 shadow-md
@@ -303,14 +321,6 @@ export default function AuthorSpotlight({
                       <div className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-gradient-to-b from-white/10 to-transparent" />
                     </button>
                   ))}
-
-                  {(!books || books.length === 0) && (
-                    <div className="text-neutral-400 text-xs py-6 px-3">
-                      {typeof fetchAuthorBooks === 'function'
-                        ? 'Loading books…'
-                        : 'No books found for this author.'}
-                    </div>
-                  )}
                 </div>
               </div>
             </article>
