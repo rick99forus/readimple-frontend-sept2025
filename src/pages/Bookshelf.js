@@ -311,19 +311,6 @@ export default function Bookshelf() {
           );
         })}
       </div>
-
-      {books.length > 0 && (
-        <div className="px-4 mt-6">
-          <AuthorSpotlight
-            likedBooks={books}
-            authorData={authorData}
-            navigate={navigate}
-            onOpenAuthor={handleOpenAuthor}
-            fetchAuthorBooks={fetchAuthorBooks}
-          />
-        </div>
-      )}
-
       {books.length === 0 && (
         <div className="px-4 py-10 text-center">
           <div className="mx-auto w-full max-w-md rounded-3xl p-8 bg-neutral-50 ring-1 ring-black/5">
