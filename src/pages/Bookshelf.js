@@ -2,8 +2,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiCall } from '../utils/api';
-import AuthorSpotlight from '../components/AuthorSpotlight';
-import AuthorBooksModal from '../components/AuthorBooksModal';
 import ShelfGrid from '../components/ShelfGrid';
 import { handleBookClick } from '../utils/navigation';
 
@@ -325,16 +323,6 @@ export default function Bookshelf() {
             </button>
           </div>
         </div>
-      )}
-
-      {authorModal.open && (
-        <AuthorBooksModal
-          isOpen={authorModal.open}
-          author={authorModal.author}
-          books={authorModal.data?.books || []}
-          onClose={handleCloseAuthor}
-          onBookClick={book => handleBookClick(navigate, book)}
-        />
       )}
 
       {books.length > 0 && (
