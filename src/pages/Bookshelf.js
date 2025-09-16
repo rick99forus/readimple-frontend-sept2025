@@ -1,5 +1,5 @@
 // filepath: src/pages/Bookshelf.js
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiCall } from '../utils/api';
 import ShelfGrid from '../components/ShelfGrid';
@@ -87,92 +87,128 @@ export default function Bookshelf() {
   const [authorModal, setAuthorModal] = useState({ open: false, author: null, data: null });
   const [recentlyOpened, setRecentlyOpened] = useState(getRecentlyOpened());
   const [readingProgress, setReadingProgress] = useState(getReadingProgress());
+  const [loadingBooks, setLoadingBooks] = useState(false);
 
-  useEffect(() => {
-    const ids = getLocalLikes();
-    const raw = ids.map(getBookData).filter(b => b && b.id);
-    setLikedIds(ids);
-    setBooks(uniqBy(raw, b => b.id));
+  // Memoize expensive handlers
+  const goDiscover = useCallback(() => navigate('/discover'), [navigate]);
+  const handleOpenAuthor = useCallback((authorName, info) => {
+    setAuthorModal({ open: true, author: authorName, data: info || {} });
   }, []);
+  const handleCloseAuthor = useCallback(() => setAuthorModal({ open: false, author: null, data: null }), []);
 
+  // Debounce localStorage updates to avoid blocking UI
   useEffect(() => {
+    let timeout;
     const onStorage = () => {
-      setLikedIds(getLocalLikes());
-      const raw = getLocalLikes().map(getBookData).filter(b => b && b.id);
-      setBooks(uniqBy(raw, b => b.id));
-      setRecentlyOpened(getRecentlyOpened());
-      setReadingProgress(getReadingProgress());
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        setLikedIds(getLocalLikes());
+        const raw = getLocalLikes().map(getBookData).filter(b => b && b.id);
+        setBooks(uniqBy(raw, b => b.id));
+        setRecentlyOpened(getRecentlyOpened());
+        setReadingProgress(getReadingProgress());
+      }, 50); // Debounce for 50ms
     };
     window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      clearTimeout(timeout);
+    };
   }, []);
 
+  // Initial load: fallback to backend if localStorage is empty
   useEffect(() => {
+    setLoadingBooks(true);
     const raw = likedIds.map(getBookData).filter(b => b && b.id);
-    setBooks(uniqBy(raw, b => b.id));
+    if (raw.length > 0) {
+      setBooks(uniqBy(raw, b => b.id));
+      setLoadingBooks(false);
+    } else if (likedIds.length > 0) {
+      // Fallback: fetch from backend
+      apiCall('/api/books/by-ids', { method: 'POST', data: { ids: likedIds } })
+        .then(res => {
+          setBooks(uniqBy(res.data?.items || [], b => b.id));
+        })
+        .catch(() => setBooks([]))
+        .finally(() => setLoadingBooks(false));
+    } else {
+      setBooks([]);
+      setLoadingBooks(false);
+    }
   }, [likedIds]);
 
-  useEffect(() => {
-    const authors = uniqAuthors(books);
-    authors.forEach(async (author) => {
-      if (authorData[author]) return;
-      try {
-        const [bioRes, booksRes] = await Promise.all([
-          apiCall('/api/books/ai-author-bio', { method: 'POST', data: { author } }),
-          apiCall(`/api/books/author-books/${encodeURIComponent(author)}`, { method: 'GET' }),
-        ]);
-        setAuthorData(prev => ({
-          ...prev,
-          [author]: {
-            bio: bioRes.data?.bio || '',
-            books: Array.isArray(booksRes.data?.books) ? booksRes.data.books : [],
-            photo: bioRes.data?.photo || '',
-          }
-        }));
-      } catch {
-        setAuthorData(prev => ({ ...prev, [author]: { bio: '', books: [] } }));
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [books]);
-
-  useEffect(() => {
-    console.log('Liked IDs:', likedIds);
-    console.log('Hydrated books:', books);
-  }, [likedIds, books]);
-
+  // Memoize derived data
   const groupedMap = useMemo(() => groupBooksByGenre(books), [books]);
   const grouped = useMemo(() => Object.fromEntries(groupedMap), [groupedMap]);
-  const totalGenres = Object.keys(grouped || {}).length;
-
+  const totalGenres = useMemo(() => Object.keys(grouped || {}).length, [grouped]);
   const topGenres = useMemo(() => {
     const rows = Array.from(groupedMap.entries()).map(([name, arr]) => ({ name, count: arr.length }));
     return rows.sort((a, b) => b.count - a.count).slice(0, 8);
   }, [groupedMap]);
-
   const totalLiked = books.length;
-  const totalAuthors = uniqAuthors(books).length;
+  const totalAuthors = useMemo(() => uniqAuthors(books).length, [books]);
 
-  const handleOpenAuthor = (authorName, info) => {
-    setAuthorModal({ open: true, author: authorName, data: info || {} });
-  };
-  const handleCloseAuthor = () => setAuthorModal({ open: false, author: null, data: null });
+  // Author data fetch (async, non-blocking)
+  useEffect(() => {
+    const authors = uniqAuthors(books);
+    authors.forEach(author => {
+      if (authorData[author]) return;
+      (async () => {
+        try {
+          const [bioRes, booksRes] = await Promise.all([
+            apiCall('/api/books/ai-author-bio', { method: 'POST', data: { author } }),
+            apiCall(`/api/books/author-books/${encodeURIComponent(author)}`, { method: 'GET' }),
+          ]);
+          setAuthorData(prev => ({
+            ...prev,
+            [author]: {
+              bio: bioRes.data?.bio || '',
+              books: Array.isArray(booksRes.data?.books) ? booksRes.data.books : [],
+              photo: bioRes.data?.photo || '',
+            }
+          }));
+        } catch {
+          setAuthorData(prev => ({ ...prev, [author]: { bio: '', books: [] } }));
+        }
+      })();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [books]);
 
-  const fetchAuthorBooks = async (authorName) => {
-    try {
-      const res = await apiCall(`/api/books/author-books/${encodeURIComponent(authorName)}`, { method: 'GET' });
-      const items = Array.isArray(res.data?.books) ? res.data.books : [];
-      setAuthorData(prev => ({
-        ...prev,
-        [authorName]: { ...(prev[authorName] || {}), books: items }
-      }));
-      return items;
-    } catch {
-      return [];
-    }
-  };
+  // Preload images for recently opened and genre books
+  useEffect(() => {
+    const preloadImages = (items) => {
+      items.forEach(b => {
+        const img = new window.Image();
+        img.src = b.coverImage || '/fallback-cover.png';
+      });
+    };
+    preloadImages(recentlyOpened || []);
+    Object.values(grouped || {}).forEach(arr => preloadImages(arr.slice(0, 12)));
+  }, [recentlyOpened, grouped]);
 
-  const goDiscover = () => navigate('/discover');
+  // Skeleton loader for book covers
+  const BookCover = React.memo(({ src, alt }) => (
+    <div className="relative w-full" style={{ aspectRatio: '2/3', minHeight: 0 }}>
+      <img
+        src={src}
+        alt={alt}
+        className="absolute inset-0 w-full h-full object-cover"
+        loading="lazy"
+        style={{ transition: 'opacity 0.2s', background: '#f3f3f3' }}
+        onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = '/fallback-cover.png'; }}
+      />
+    </div>
+  ));
+
+  // Loader or empty state
+  if (loadingBooks) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white text-black">
+        <div className="text-lg text-neutral-400">Loading your bookshelf...</div>
+      </div>
+    );
+  }
 
   if (showAllGenre) {
     const genreBooks = (grouped && grouped[showAllGenre]) ? grouped[showAllGenre] : [];
@@ -253,14 +289,7 @@ export default function Bookshelf() {
                 onClick={() => handleBookClick(navigate, b)}
                 title={`${b.title} — ${b.author}`}
               >
-                <div className="relative w-full" style={{ aspectRatio: '2/3' }}>
-                  <img
-                    src={b.coverImage || '/fallback-cover.png'}
-                    alt={b.title}
-                    className="absolute inset-0 w-full h-full object-cover"
-                    onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/fallback-cover.png'; }}
-                  />
-                </div>
+                <BookCover src={b.coverImage || '/fallback-cover.png'} alt={b.title} />
                 <div className="p-2">
                   <div className="text-[12px] font-semibold line-clamp-2">{b.title}</div>
                   <div className="text-[10px] text-neutral-500 line-clamp-1">{b.author}</div>
@@ -290,17 +319,16 @@ export default function Bookshelf() {
                     title={`${book.title} — ${book.author || 'Unknown'}`}
                     aria-label={`Open ${book.title}`}
                   >
-                    <div className="relative w-full" style={{ aspectRatio: '2/3' }}>
-                      <img
-                        src={book.coverImage || '/fallback-cover.png'}
-                        alt={book.title}
-                        className="absolute inset-0 w-full h-full object-cover"
-                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/fallback-cover.png'; }}
-                      />
-                      <div className="absolute inset-x-0 bottom-0 p-2 pt-8 bg-gradient-to-t from-black/80 via-black/30 to-transparent">
-                        <div className="text-white text-[11px] font-semibold leading-tight line-clamp-2">{book.title}</div>
-                        {book.author && <div className="text-white/80 text-[10px] leading-tight line-clamp-1">{book.author}</div>}
-                      </div>
+                    <div className="relative w-full" style={{ aspectRatio: '2/3', minHeight: 0 }}>
+                      <BookCover src={book.coverImage || '/fallback-cover.png'} alt={book.title} />
+                      {/* Optional gradient overlay for effect only */}
+                      <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-black/80 via-black/30 to-transparent pointer-events-none" />
+                    </div>
+                    <div className="p-2">
+                      <div className="text-[12px] font-semibold line-clamp-2">{book.title}</div>
+                      {book.author && (
+                        <div className="text-[10px] text-neutral-500 line-clamp-1">{book.author}</div>
+                      )}
                     </div>
                   </button>
                 ))}
@@ -309,6 +337,7 @@ export default function Bookshelf() {
           );
         })}
       </div>
+
       {books.length === 0 && (
         <div className="px-4 py-10 text-center">
           <div className="mx-auto w-full max-w-md rounded-3xl p-8 bg-neutral-50 ring-1 ring-black/5">

@@ -265,6 +265,19 @@ export default function Scan({ setShowTabBar, setShowHeader }) {
     scanRAF.current = requestAnimationFrame(tick);
   };
 
+  // Debounce findCandidates to avoid rapid API calls
+  const findCandidatesDebounced = (() => {
+    let timeout;
+    return async (params) => {
+      if (timeout) clearTimeout(timeout);
+      return new Promise((resolve) => {
+        timeout = setTimeout(async () => {
+          resolve(await findCandidates(params));
+        }, 150); // 150ms debounce
+      });
+    };
+  })();
+
   const handleDecodedText = async (decoded) => {
     const now = Date.now();
     // prevent flapping: require stable code for 250ms
@@ -283,7 +296,7 @@ export default function Scan({ setShowTabBar, setShowHeader }) {
     setNote(`Detected ISBN ${isbn}. Finding matches…`);
     setIsLoading(true);
     try {
-      const list = await findCandidates({ isbn });
+      const list = await findCandidatesDebounced({ isbn });
       if (list.length === 0) throw new Error('No book found for that barcode.');
 
       setCandidates(list.slice(0, 6));
@@ -336,7 +349,7 @@ export default function Scan({ setShowTabBar, setShowHeader }) {
       }
 
       const queryGuess = buildQueryFromOcr(ocrText);
-      const list = await findCandidates({ isbn: null, text: queryGuess });
+      const list = await findCandidatesDebounced({ isbn: null, text: queryGuess });
       if (list.length === 0) throw new Error('Could not match that cover. Try again or type the title.');
 
       setCandidates(list.slice(0, 6));
@@ -482,6 +495,38 @@ export default function Scan({ setShowTabBar, setShowHeader }) {
     setNote('');
     await startCamera();
   };
+
+  // Use React.memo for candidate items
+  const CandidateItem = React.memo(function CandidateItem({ b, i, onSelect }) {
+    return (
+      <div key={b.id || i} className="flex items-center gap-3 p-3">
+        <div className="relative w-14 h-20 rounded-lg overflow-hidden border border-neutral-200 bg-neutral-100 flex-shrink-0">
+          <img
+            src={shrinkCover(b.coverImage)}
+            alt={b.title}
+            className="absolute inset-0 w-full h-full object-cover"
+            loading="lazy"
+            onError={(e) => (e.currentTarget.src = '/default-cover.png')}
+          />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-5 bg-gradient-to-b from-white/10 to-transparent" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[15px] font-bold text-neutral-900 line-clamp-2">{b.title}</div>
+          <div className="text-[12px] text-neutral-600 italic line-clamp-1">by {b.author || 'Unknown'}</div>
+          <div className="text-[11px] text-neutral-500 mt-0.5">
+            {(b.categories && b.categories[0]) || b._genre || 'Books'}
+            {b.publishedDate ? ` · ${b.publishedDate}` : ''}
+          </div>
+        </div>
+        <button
+          onClick={() => onSelect(b)}
+          className="px-3 py-1.5 rounded-full bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600 active:scale-[0.98]"
+        >
+          This one
+        </button>
+      </div>
+    );
+  });
 
   /* --------------------------------- UI ---------------------------------- */
 
@@ -677,32 +722,7 @@ export default function Scan({ setShowTabBar, setShowHeader }) {
               ) : (
                 <div className="divide-y divide-neutral-100">
                   {candidates.map((b, i) => (
-                    <div key={b.id || i} className="flex items-center gap-3 p-3">
-                      <div className="relative w-14 h-20 rounded-lg overflow-hidden border border-neutral-200 bg-neutral-100 flex-shrink-0">
-                        <img
-                          src={shrinkCover(b.coverImage)}
-                          alt={b.title}
-                          className="absolute inset-0 w-full h-full object-cover"
-                          loading="lazy"
-                          onError={(e) => (e.currentTarget.src = '/default-cover.png')}
-                        />
-                        <div className="pointer-events-none absolute inset-x-0 top-0 h-5 bg-gradient-to-b from-white/10 to-transparent" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[15px] font-bold text-neutral-900 line-clamp-2">{b.title}</div>
-                        <div className="text-[12px] text-neutral-600 italic line-clamp-1">by {b.author || 'Unknown'}</div>
-                        <div className="text-[11px] text-neutral-500 mt-0.5">
-                          {(b.categories && b.categories[0]) || b._genre || 'Books'}
-                          {b.publishedDate ? ` · ${b.publishedDate}` : ''}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleBookClick(navigate, b)}
-                        className="px-3 py-1.5 rounded-full bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600 active:scale-[0.98]"
-                      >
-                        This one
-                      </button>
-                    </div>
+                    <CandidateItem key={b.id || i} b={b} i={i} onSelect={(book) => handleBookClick(navigate, book)} />
                   ))}
                 </div>
               )}

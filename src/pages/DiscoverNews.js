@@ -425,6 +425,63 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
     } catch {}
   };
 
+  // Memoize book card for river
+  const BookCard = React.memo(function BookCard({ b, teaser, hookPhrase, onClick }) {
+    const kicker = `Books • ${(b._genre || b.categories?.[0] || 'General')}`;
+    const stamp = b.publishedDate && dayjs(b.publishedDate).isValid()
+      ? dayjs(b.publishedDate).fromNow()
+      : '';
+    return (
+      <article key={b.id} className="px-4 py-4 active:bg-neutral-50"
+        onClick={() => onClick(b)} role="button" aria-label={`Open ${b.title}`}>
+        <div className="flex flex-col gap-1 items-start mb-4 capitalize">
+          <span className="h-1 w-full bg-neutral-100 border border-none mb-2"></span>
+          {hookPhrase && <span className="italic text-sm w-auto">{hookPhrase}</span>}
+        </div>
+        <div className="flex gap-3">
+          <div className="relative w-24 h-32 flex-shrink-0 rounded-xl overflow-hidden border border-neutral-200 bg-neutral-100">
+            <img src={b.coverImage || '/default-cover.png'} alt={b.title}
+              className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-orange-600 font-semibold mb-0.5">
+              <span className="truncate">{kicker}</span>
+            </div>
+            <h2 className="text-[16px] leading-snug font-extrabold text-neutral-900 line-clamp-2">{b.title}</h2>
+            {teaser ? (
+              <p className="text-[13px] text-neutral-700 mt-1 line-clamp-3">{teaser}</p>
+            ) : (
+              <div className="mt-1 space-y-2">
+                <div className="h-3 w-10/12 rounded bg-neutral-200 animate-pulse" />
+                <div className="h-3 w-8/12 rounded bg-neutral-200 animate-pulse" />
+              </div>
+            )}
+            <div className="mt-2 flex items-center text-[11px] text-neutral-500">
+              <span className="truncate">By {b.author || 'Unknown'}</span>
+              {b.pageCount ? <span className="px-2">·</span> : null}
+              {b.pageCount ? <span>{b.pageCount} pages</span> : null}
+              {b.publishedDate ? <span className="px-2">·</span> : null}
+              {b.publishedDate ? <span className="truncate">{b.publishedDate}</span> : null}
+              <span className="ml-auto inline-flex items-center justify-center w-8 h-8 rounded-xl bg-neutral-100 text-neutral-700 transition">
+                <svg viewBox="0 0 24 24" className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </span>
+            </div>
+          </div>
+        </div>
+      </article>
+    );
+  });
+
+  // Preload images for visible books only
+  useEffect(() => {
+    visibleBooks.forEach(b => {
+      const img = new window.Image();
+      img.src = b.coverImage || '/default-cover.png';
+    });
+  }, [visibleBooks]);
+
   /* ================================ UI ================================ */
   return (
     <>
@@ -513,88 +570,55 @@ export default function DiscoverNews({ setShowTabBar, setShowHeader }) {
           {visibleBooks.slice(1).map((b, idx) => {
             const isFeature = ((idx + 1) % 4 === 0);
             const teaser = typeof teasers?.[b.id] === 'string' ? teasers[b.id] : null;
-            const kicker = `Books • ${(b._genre || b.categories?.[0] || 'General')}`;
-            const stamp = b.publishedDate && dayjs(b.publishedDate).isValid()
-              ? dayjs(b.publishedDate).fromNow()
-              : '';
-
+            const hookPhrase = hookPhrases[b.id];
             if (isFeature) {
+              const kicker = `Books • ${(b._genre || b.categories?.[0] || 'General')}`;
+              const stamp = b.publishedDate && dayjs(b.publishedDate).isValid()
+                ? dayjs(b.publishedDate).fromNow()
+                : '';
               return (
                 <article key={b.id} className="py-4 active:opacity-95"
-                         onClick={() => handleBookChange(b)} role="button" aria-label={`Open ${b.title}`}>
-                  <div className="relative w-full">
-                    <div className="relative w-full aspect-[16/9] sm:aspect-[21/9] bg-neutral-200 overflow-hidden rounded-xl">
-                      <img src={b.coverImage || '/default-cover.png'} alt={b.title}
-                           className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-transparent" />
-                      <div className="absolute top-2 left-3 right-3 flex items-center gap-2">
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-[11px] font-semibold bg-white/90 text-black/80 shadow">
-                          {kicker}
-                        </span>
-                        {stamp && <span className="text-[11px] text-white/80">{stamp}</span>}
-                      </div>
-                      <div className="absolute left-0 right-0 bottom-0 px-4 pb-4">
-                        <h3 className="text-[18px] sm:text-[20px] font-extrabold leading-snug text-white line-clamp-3 drop-shadow">
-                          {b.title}
-                        </h3>
-                        <div className="mt-2 text-[13px] text-white/90 line-clamp-2">{teaser || ''}</div>
-                        <div className="mt-3 flex items-center gap-2 text-[11px] text-white/80">
-                          <span className="truncate">By {b.author || 'Unknown'}</span>
-                          {b.publishedDate ? (<><span className="opacity-60">•</span><span className="truncate">{b.publishedDate}</span></>) : null}
-                          <span className="ml-auto inline-flex items-center gap-1 bg-white/10 backdrop-blur px-2 py-1 rounded-full">
-                            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
-                            </svg>
-                            Read
-                          </span>
+                           onClick={() => handleBookChange(b)} role="button" aria-label={`Open ${b.title}`}>
+                      <div className="relative w-full">
+                        <div className="relative w-full aspect-[16/9] sm:aspect-[21/9] bg-neutral-200 overflow-hidden rounded-xl">
+                          <img src={b.coverImage || '/default-cover.png'} alt={b.title}
+                               className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-transparent" />
+                          <div className="absolute top-2 left-3 right-3 flex items-center gap-2">
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-[11px] font-semibold bg-white/90 text-black/80 shadow">
+                              {kicker}
+                            </span>
+                            {stamp && <span className="text-[11px] text-white/80">{stamp}</span>}
+                          </div>
+                          <div className="absolute left-0 right-0 bottom-0 px-4 pb-4">
+                            <h3 className="text-[18px] sm:text-[20px] font-extrabold leading-snug text-white line-clamp-3 drop-shadow">
+                              {b.title}
+                            </h3>
+                            <div className="mt-2 text-[13px] text-white/90 line-clamp-2">{teaser || ''}</div>
+                            <div className="mt-3 flex items-center gap-2 text-[11px] text-white/80">
+                              <span className="truncate">By {b.author || 'Unknown'}</span>
+                              {b.publishedDate ? (<><span className="opacity-60">•</span><span className="truncate">{b.publishedDate}</span></>) : null}
+                              <span className="ml-auto inline-flex items-center gap-1 bg-white/10 backdrop-blur px-2 py-1 rounded-full">
+                                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
+                                </svg>
+                                Read
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                </article>
+                    </article>
               );
             }
-
             return (
-              <article key={b.id} className="px-4 py-4 active:bg-neutral-50"
-                       onClick={() => handleBookChange(b)} role="button" aria-label={`Open ${b.title}`}>
-                <div className="flex flex-col gap-1 items-start mb-4 capitalize">
-                  <span className="h-1 w-full bg-neutral-100 border border-none mb-2"></span>
-                  {hookPhrases[b.id] && <span className="italic text-sm w-auto">{hookPhrases[b.id]}</span>}
-                </div>
-                <div className="flex gap-3">
-                  <div className="relative w-24 h-32 flex-shrink-0 rounded-xl overflow-hidden border border-neutral-200 bg-neutral-100">
-                    <img src={b.coverImage || '/default-cover.png'} alt={b.title}
-                         className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-orange-600 font-semibold mb-0.5">
-                      <span className="truncate">{kicker}</span>
-                    </div>
-                    <h2 className="text-[16px] leading-snug font-extrabold text-neutral-900 line-clamp-2">{b.title}</h2>
-                    {teaser ? (
-                      <p className="text-[13px] text-neutral-700 mt-1 line-clamp-3">{teaser}</p>
-                    ) : (
-                      <div className="mt-1 space-y-2">
-                        <div className="h-3 w-10/12 rounded bg-neutral-200 animate-pulse" />
-                        <div className="h-3 w-8/12 rounded bg-neutral-200 animate-pulse" />
-                      </div>
-                    )}
-                    <div className="mt-2 flex items-center text-[11px] text-neutral-500">
-                      <span className="truncate">By {b.author || 'Unknown'}</span>
-                      {b.pageCount ? <span className="px-2">·</span> : null}
-                      {b.pageCount ? <span>{b.pageCount} pages</span> : null}
-                      {b.publishedDate ? <span className="px-2">·</span> : null}
-                      {b.publishedDate ? <span className="truncate">{b.publishedDate}</span> : null}
-                      <span className="ml-auto inline-flex items-center justify-center w-8 h-8 rounded-xl bg-neutral-100 text-neutral-700 transition">
-                        <svg viewBox="0 0 24 24" className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                        </svg>
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </article>
+              <BookCard
+                key={b.id}
+                b={b}
+                teaser={teaser}
+                hookPhrase={hookPhrase}
+                onClick={handleBookChange}
+              />
             );
           })}
         </div>
