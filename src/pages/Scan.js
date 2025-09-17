@@ -1,5 +1,5 @@
 // filepath: src/components/Scan.js
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiCall } from '../utils/api';
 import { BrowserMultiFormatReader } from '@zxing/browser';
@@ -70,6 +70,7 @@ const CAMERA_PERMISSION_KEY = 'camera_permission_v2';
 
 export default function Scan({ setShowTabBar, setShowHeader }) {
   const navigate = useNavigate();
+  const [isPending, startTransition] = useTransition();
 
   // UI state
   const [error, setError] = useState('');
@@ -295,23 +296,26 @@ export default function Scan({ setShowTabBar, setShowHeader }) {
     await stopCamera(); // pause live scanning while we fetch
     setNote(`Detected ISBN ${isbn}. Finding matches…`);
     setIsLoading(true);
-    try {
-      const list = await findCandidatesDebounced({ isbn });
-      if (list.length === 0) throw new Error('No book found for that barcode.');
 
-      setCandidates(list.slice(0, 6));
-      setCapturedImage(null);
-      setConfirmOpen(true);
-      setNote('');
-    } catch (e) {
-      setError(e.message || 'Failed to find book for that barcode.');
-      await sleep(900);
-      setError('');
-      // resume camera
-      startCamera();
-    } finally {
-      setIsLoading(false);
-    }
+    setTimeout(async () => {
+      try {
+        const list = await findCandidatesDebounced({ isbn });
+        if (list.length === 0) throw new Error('No book found for that barcode.');
+        startTransition(() => {
+          setCandidates(list.slice(0, 6));
+          setCapturedImage(null);
+          setConfirmOpen(true);
+          setNote('');
+        });
+      } catch (e) {
+        setError(e.message || 'Failed to find book for that barcode.');
+        await sleep(900);
+        setError('');
+        startCamera();
+      } finally {
+        setIsLoading(false);
+      }
+    }, 0);
   };
 
   /* ------------------------- Capture & OCR fallback ------------------------ */

@@ -86,7 +86,7 @@ function BookRow({ books = [], onBookClick, searchTerm = '' }) {
                 className="group block w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 rounded-2xl"
               >
                 {/* Card frame */}
-                <div className="relative w-32 h-52 rounded-2xl overflow-hidden shadow-md ring-1 ring-black/5 bg-neutral-200">
+                <div className="relative w-32 h-52 rounded-2xl overflow-hidden shadow-md ring-1 ring-black/5 bg-neutral-200 flex flex-col items-center">
                   {/* Cover */}
                   {book.coverImage ? (
                     <img
@@ -97,30 +97,29 @@ function BookRow({ books = [], onBookClick, searchTerm = '' }) {
                         e.currentTarget.onerror = null;
                         e.currentTarget.src = '/fallback-cover.png';
                       }}
-                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                      className="w-24 h-36 object-cover rounded shadow mb-2 mt-2"
+                      style={{ minWidth: '6rem', minHeight: '9rem' }}
                     />
                   ) : (
-                    <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-neutral-200 text-neutral-400 text-xs">
+                    <div className="w-24 h-36 flex items-center justify-center bg-gray-200 rounded shadow text-xs text-gray-400 mb-2 mt-2">
                       No Image
                     </div>
                   )}
-
-                  {/* Gradient title band (same style vibe as Continue) */}
-                  <div className="absolute inset-x-0 bottom-0 p-2 pt-10 bg-gradient-to-t from-black/75 via-black/30 to-transparent">
+                  {/* Title & Author below cover */}
+                  <div className="w-full px-1 pb-1">
                     <div
-                      className="text-white text-[13px] font-semibold leading-tight line-clamp-2"
+                      className="font-bold text-black text-sm text-center truncate w-full"
+                      title={book.title}
                       dangerouslySetInnerHTML={{ __html: highlightMatch(book.title, searchTerm) }}
                     />
                     {book.author && (
                       <div
-                        className="text-white/80 text-[11px] line-clamp-1"
+                        className="text-neutral-400 text-xs text-center truncate w-full"
+                        title={book.author}
                         dangerouslySetInnerHTML={{ __html: highlightMatch(book.author, searchTerm) }}
                       />
                     )}
                   </div>
-
-                  {/* subtle top sheen */}
-                  <div className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-gradient-to-b from-white/10 to-transparent" />
                 </div>
               </button>
             </div>

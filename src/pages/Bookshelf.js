@@ -1,5 +1,5 @@
 // filepath: src/pages/Bookshelf.js
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiCall } from '../utils/api';
 import ShelfGrid from '../components/ShelfGrid';
@@ -79,6 +79,7 @@ function groupBooksByGenre(books) {
 /* ================================ Page ======================================= */
 export default function Bookshelf() {
   const navigate = useNavigate();
+  const [isPending, startTransition] = useTransition();
 
   const [showAllGenre, setShowAllGenre] = useState(null);
   const [likedIds, setLikedIds] = useState(getLocalLikes());
@@ -102,11 +103,13 @@ export default function Bookshelf() {
     const onStorage = () => {
       clearTimeout(timeout);
       timeout = setTimeout(() => {
-        setLikedIds(getLocalLikes());
-        const raw = getLocalLikes().map(getBookData).filter(b => b && b.id);
-        setBooks(uniqBy(raw, b => b.id));
-        setRecentlyOpened(getRecentlyOpened());
-        setReadingProgress(getReadingProgress());
+        startTransition(() => {
+          setLikedIds(getLocalLikes());
+          const raw = getLocalLikes().map(getBookData).filter(b => b && b.id);
+          setBooks(uniqBy(raw, b => b.id));
+          setRecentlyOpened(getRecentlyOpened());
+          setReadingProgress(getReadingProgress());
+        });
       }, 50); // Debounce for 50ms
     };
     window.addEventListener('storage', onStorage);
@@ -121,19 +124,25 @@ export default function Bookshelf() {
     setLoadingBooks(true);
     const raw = likedIds.map(getBookData).filter(b => b && b.id);
     if (raw.length > 0) {
-      setBooks(uniqBy(raw, b => b.id));
-      setLoadingBooks(false);
+      startTransition(() => {
+        setBooks(uniqBy(raw, b => b.id));
+        setLoadingBooks(false);
+      });
     } else if (likedIds.length > 0) {
       // Fallback: fetch from backend
       apiCall('/api/books/by-ids', { method: 'POST', data: { ids: likedIds } })
         .then(res => {
-          setBooks(uniqBy(res.data?.items || [], b => b.id));
+          startTransition(() => {
+            setBooks(uniqBy(res.data?.items || [], b => b.id));
+          });
         })
-        .catch(() => setBooks([]))
-        .finally(() => setLoadingBooks(false));
+        .catch(() => startTransition(() => setBooks([])))
+        .finally(() => startTransition(() => setLoadingBooks(false)));
     } else {
-      setBooks([]);
-      setLoadingBooks(false);
+      startTransition(() => {
+        setBooks([]);
+        setLoadingBooks(false);
+      });
     }
   }, [likedIds]);
 
