@@ -222,7 +222,7 @@ export default function Bookshelf() {
   if (showAllGenre) {
     const genreBooks = (grouped && grouped[showAllGenre]) ? grouped[showAllGenre] : [];
     return (
-      <div className="min-h-screen w-full flex flex-col bg-white text-black px-4 py-4">
+      <div className="relative overflow-hidden shadow-md max-w-40 rounded-2xl bg-white hover:shadow-lg transition-shadow items-center justify-center  flex flex-col">
         <div className="flex items-center mb-4">
           <button
             className="mr-2 inline-flex items-center justify-center w-9 h-9 rounded-lg bg-white border border-neutral-200 text-neutral-700 hover:bg-neutral-50"

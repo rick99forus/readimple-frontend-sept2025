@@ -86,7 +86,7 @@ function BookRow({ books = [], onBookClick, searchTerm = '' }) {
                 className="group block w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 rounded-2xl"
               >
                 {/* Card frame */}
-                <div className="relative w-32 h-52 rounded-2xl overflow-hidden shadow-md ring-1 ring-black/5 bg-white flex flex-col items-center">
+                <div className="relative overflow-hidden shadow-md max-w-40 rounded-2xl bg-white hover:shadow-lg transition-shadow items-center justify-center  flex flex-col">
                   {/* Cover */}
                   {book.coverImage ? (
                     <img
