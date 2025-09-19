@@ -222,7 +222,7 @@ export default function Bookshelf() {
   if (showAllGenre) {
     const genreBooks = (grouped && grouped[showAllGenre]) ? grouped[showAllGenre] : [];
     return (
-      <div className="relative overflow-hidden shadow-md max-w-40 rounded-2xl bg-white hover:shadow-lg transition-shadow items-center justify-center  flex flex-col">
+      <div className="relative overflow-hidden items-center justify-center  flex flex-col">
         <div className="flex items-center mb-4">
           <button
             className="mr-2 inline-flex items-center justify-center w-9 h-9 rounded-lg bg-white border border-neutral-200 text-neutral-700 hover:bg-neutral-50"
@@ -294,7 +294,7 @@ export default function Bookshelf() {
             {recentlyOpened.map((b, idx) => (
               <button
                 key={b.id || idx}
-                className="snap-start shrink-0 w-28 rounded-xl bg-white ring-1 ring-black/5 shadow hover:shadow-md transition-all overflow-hidden text-left"
+                className="flex-shrink-0 snap-start w-28 rounded-xl bg-white ring-1 ring-black/5 shadow hover:shadow-md transition-all overflow-hidden text-left"
                 onClick={() => handleBookClick(navigate, b)}
                 title={`${b.title} — ${b.author}`}
               >

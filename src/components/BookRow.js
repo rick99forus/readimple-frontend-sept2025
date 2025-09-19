@@ -1,52 +1,101 @@
+// filepath: src/components/BookRow.js
 import React, { useRef, useEffect, useState } from 'react';
-import SkeletonCard from './SkeletonCard';
-import './BookRow.css';
 
 function highlightMatch(text, query) {
   if (!query) return text;
   const regex = new RegExp(`(${query})`, 'ig');
-  return text.replace(regex, '<mark class="bg-orange-300 text-black px-0.5 rounded-sm">$1</mark>');
+  return text.replace(
+    regex,
+    '<mark class="bg-orange-300 text-black px-0.5 rounded-sm">$1</mark>'
+  );
 }
 
-function BookRow({ books = [], onBookClick, searchTerm = '' }) {
+// Tunables to keep sizing consistent with grid cards
+const CARD_HEIGHT = 200; // 16rem (h-64)
+const COVER_HEIGHT = 160; // 10rem (h-40)
+
+function SkeletonCard() {
+  return (
+    <div className="flex-shrink-0 px-1 py-3 w-28 sm:w-32">
+      <div
+        className="rounded-2xl ring-1 ring-black/5 shadow bg-white flex flex-col"
+        style={{ height: CARD_HEIGHT }}
+      >
+        <div
+          className="w-full overflow-hidden rounded-t-xl bg-neutral-200 animate-pulse"
+          style={{ height: COVER_HEIGHT }}
+          aria-hidden="true"
+        />
+        <div className="flex-1 rounded-b-xl bg-white px-2 py-2">
+          <div className="h-3 w-5/6 bg-neutral-200 rounded mb-1.5" />
+          <div className="h-2.5 w-1/2 bg-neutral-200 rounded" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function BookRow({ books = [], onBookClick, searchTerm = '' }) {
   const scrollRef = useRef(null);
   const [scrollTimeout, setScrollTimeout] = useState(null);
 
-  // Remove duplicates and only use books with cover images
-  const filterUniqueBooks = (arr) => {
+  // De-dupe + require cover image
+  const displayBooks = React.useMemo(() => {
     const seen = new Set();
-    return arr.filter(b => b?.coverImage && !seen.has(b.id) && seen.add(b.id));
-  };
-  const displayBooks = filterUniqueBooks(books);
+    return (books || []).filter(b => {
+      if (!b?.id || !b?.coverImage) return false;
+      if (seen.has(b.id)) return false;
+      seen.add(b.id);
+      return true;
+    });
+  }, [books]);
 
   // Repeat 3x for infinite carousel
-  const infiniteBooks = [...displayBooks, ...displayBooks, ...displayBooks];
+  const infiniteBooks = React.useMemo(
+    () => [...displayBooks, ...displayBooks, ...displayBooks],
+    [displayBooks]
+  );
 
-  // On mount, scroll to the middle set
+  // Compute card width + gap
+  const getItemWidth = () => {
+    const el = scrollRef.current;
+    if (!el) return 140;
+    const first = el.querySelector('[data-book-card="true"]');
+    const style = getComputedStyle(el);
+    const gapPx = parseFloat(style.columnGap || style.gap || '8') || 8; // gap-2
+    if (first) {
+      const rect = first.getBoundingClientRect();
+      return rect.width + gapPx;
+    }
+    return 140;
+  };
+
+  // Start in the middle band
   useEffect(() => {
     const el = scrollRef.current;
     if (el && displayBooks.length > 0) {
-      const cardWidth = 128 + 16; // 8rem + gap
-      el.scrollLeft = displayBooks.length * cardWidth;
+      el.scrollLeft = displayBooks.length * getItemWidth();
     }
-  }, [books.length, displayBooks.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayBooks.length]);
 
-  // Infinite scroll logic
+  // Infinite wraparound
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el) return;
-    const cardWidth = 128 + 16;
+    if (!el || displayBooks.length === 0) return;
     const total = displayBooks.length;
 
     const handleScroll = () => {
       if (scrollTimeout) clearTimeout(scrollTimeout);
       setScrollTimeout(setTimeout(() => {}, 900));
 
-      // wraparound
+      const cardWidth = getItemWidth();
+      const band = total * cardWidth;
+
       if (el.scrollLeft <= cardWidth) {
-        el.scrollLeft = total * cardWidth + el.scrollLeft;
-      } else if (el.scrollLeft >= total * 2 * cardWidth) {
-        el.scrollLeft = el.scrollLeft - total * cardWidth;
+        el.scrollLeft = el.scrollLeft + band;
+      } else if (el.scrollLeft >= band * 2) {
+        el.scrollLeft = el.scrollLeft - band;
       }
     };
 
@@ -56,78 +105,105 @@ function BookRow({ books = [], onBookClick, searchTerm = '' }) {
       if (scrollTimeout) clearTimeout(scrollTimeout);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scrollTimeout, books.length]);
+  }, [scrollTimeout, displayBooks.length]);
 
   return (
-    <div className="book-row-container">
-      {/* Carousel */}
+    <div className="w-full">
       <div
         ref={scrollRef}
-        className="book-row-scroll no-scrollbar"
+        className="
+          flex gap-2 overflow-x-auto pb-1
+          snap-x snap-mandatory
+          [-webkit-overflow-scrolling:touch]
+          scrollbar-thin scrollbar-thumb-neutral-300 hover:scrollbar-thumb-neutral-400
+        "
         tabIndex={0}
         aria-label="Book carousel"
         style={{
           WebkitMaskImage:
-            'linear-gradient(to right, transparent, black 8px, black calc(100% - 8px), transparent)',
+            'linear-gradient(to right, transparent, black 12px, black calc(100% - 12px), transparent)',
           maskImage:
-            'linear-gradient(to right, transparent, black 8px, black calc(100% - 8px), transparent)',
+            'linear-gradient(to right, transparent, black 12px, black calc(100% - 12px), transparent)',
         }}
       >
-        {books.length === 0 ? (
-          Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
-        ) : (
-          infiniteBooks.map((book, idx) => (
-            <div key={`${book.id}-${idx}`} className="book-row-item">
-              <button
-                onClick={() => onBookClick?.(book)}
-                tabIndex={0}
-                aria-label={`Book: ${book.title} by ${book.author || 'Unknown'}`}
-                title={`${book.title}${book.author ? ' by ' + book.author : ''}`}
-                className="group block w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 rounded-2xl"
+        {displayBooks.length === 0
+          ? Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
+          : infiniteBooks.map((book, idx) => (
+              <div
+                key={`${book.id}-${idx}`}
+                className="flex-shrink-0 px-1 py-3 w-28 sm:w-32 snap-start"
+                data-book-card="true"
               >
-                {/* Card frame */}
-                <div className="relative overflow-hidden shadow-md max-w-40 rounded-2xl bg-white hover:shadow-lg transition-shadow items-center justify-center  flex flex-col">
-                  {/* Cover */}
-                  {book.coverImage ? (
-                    <img
-                      src={book.coverImage}
-                      alt={book.title}
-                      loading="lazy"
-                      onError={(e) => {
-                        e.currentTarget.onerror = null;
-                        e.currentTarget.src = '/fallback-cover.png';
-                      }}
-                      className="w-24 h-36 object-cover rounded shadow mb-2 mt-2"
-                      style={{ minWidth: '6rem', minHeight: '9rem' }}
-                    />
-                  ) : (
-                    <div className="w-24 h-36 flex items-center justify-center bg-gray-200 rounded shadow text-xs text-gray-400 mb-2 mt-2">
-                      No Image
-                    </div>
-                  )}
-                  {/* Title & Author below cover */}
-                  <div className="w-full px-1 pb-1">
+                <button
+                  onClick={() => onBookClick?.(book)}
+                  tabIndex={0}
+                  aria-label={`Book: ${book.title} by ${book.author || 'Unknown'}`}
+                  title={`${book.title}${book.author ? ' by ' + book.author : ''}`}
+                  className="group block w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 rounded-2xl"
+                >
+                  {/* Card: fixed height, flex-col so bottom fills remainder */}
+                  <div
+                    className="rounded-2xl ring-1 ring-black/5 shadow bg-white flex flex-col"
+                    style={{ height: CARD_HEIGHT }}
+                  >
+                    {/* Top cover */}
                     <div
-                      className="font-bold text-black text-sm text-center truncate w-full"
-                      title={book.title}
-                      dangerouslySetInnerHTML={{ __html: highlightMatch(book.title, searchTerm) }}
-                    />
-                    {book.author && (
-                      <div
-                        className="text-neutral-400 text-xs text-center truncate w-full"
-                        title={book.author}
-                        dangerouslySetInnerHTML={{ __html: highlightMatch(book.author, searchTerm) }}
-                      />
-                    )}
+                      className="relative w-full overflow-hidden rounded-t-xl bg-neutral-200"
+                      style={{ height: COVER_HEIGHT }}
+                    >
+                      {book.coverImage ? (
+                        <img
+                          src={book.coverImage}
+                          alt={book.title}
+                          loading="lazy"
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = '/fallback-cover.png';
+                          }}
+                          className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                        />
+                      ) : (
+                        <div className="absolute inset-0 w-full h-full flex items-center justify-center text-neutral-400 text-xs bg-neutral-200">
+                          No Image
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Bottom info fills remaining height */}
+                    <div className="flex-1 rounded-b-xl bg-white px-2 py-2">
+                      {typeof highlightMatch === 'function' ? (
+                        <h3
+                          className="text-[12px] font-semibold leading-tight text-neutral-900 line-clamp-1"
+                          dangerouslySetInnerHTML={{
+                            __html: highlightMatch(book.title, searchTerm),
+                          }}
+                        />
+                      ) : (
+                        <h3 className="text-[12px] font-semibold leading-tight text-neutral-900 line-clamp-2">
+                          {book.title}
+                        </h3>
+                      )}
+
+                      {book.author && (
+                        typeof highlightMatch === 'function' ? (
+                          <p
+                            className="text-[11px] text-neutral-500 line-clamp-1 mt-0.5"
+                            dangerouslySetInnerHTML={{
+                              __html: highlightMatch(book.author, searchTerm),
+                            }}
+                          />
+                        ) : (
+                          <p className="text-[11px] text-neutral-500 line-clamp-1 mt-0.5">
+                            {book.author}
+                          </p>
+                        )
+                      )}
+                    </div>
                   </div>
-                </div>
-              </button>
-            </div>
-          ))
-        )}
+                </button>
+              </div>
+            ))}
       </div>
     </div>
   );
 }
-
-export default BookRow;

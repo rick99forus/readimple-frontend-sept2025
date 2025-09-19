@@ -6,7 +6,7 @@ export default function ShelfGrid({ books = [], onBookClick }) {
         <button
           key={book.id || idx}
           onClick={() => onBookClick(book)}
-          className="relative overflow-hidden shadow-md max-w-40 rounded-2xl bg-white hover:shadow-lg transition-shadow items-center justify-center  flex flex-col"
+          className=""
           title={`${book.title}${book.author ? ' — ' + book.author : ''}`}
           aria-label={`Open ${book.title} by ${book.author || 'Unknown'}`}
         >
