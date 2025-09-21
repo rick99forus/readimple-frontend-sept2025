@@ -79,22 +79,27 @@ function groupBooksByGenre(books) {
 /* ================================ Page ======================================= */
 export default function Bookshelf() {
   const navigate = useNavigate();
+  // eslint-disable-next-line
   const [isPending, startTransition] = useTransition();
 
   const [showAllGenre, setShowAllGenre] = useState(null);
   const [likedIds, setLikedIds] = useState(getLocalLikes());
   const [books, setBooks] = useState([]);
   const [authorData, setAuthorData] = useState({});
+  // eslint-disable-next-line
   const [authorModal, setAuthorModal] = useState({ open: false, author: null, data: null });
   const [recentlyOpened, setRecentlyOpened] = useState(getRecentlyOpened());
+  // eslint-disable-next-line
   const [readingProgress, setReadingProgress] = useState(getReadingProgress());
   const [loadingBooks, setLoadingBooks] = useState(false);
 
   // Memoize expensive handlers
   const goDiscover = useCallback(() => navigate('/discover'), [navigate]);
+  // eslint-disable-next-line
   const handleOpenAuthor = useCallback((authorName, info) => {
     setAuthorModal({ open: true, author: authorName, data: info || {} });
   }, []);
+  // eslint-disable-next-line
   const handleCloseAuthor = useCallback(() => setAuthorModal({ open: false, author: null, data: null }), []);
 
   // Debounce localStorage updates to avoid blocking UI

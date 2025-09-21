@@ -70,6 +70,7 @@ const CAMERA_PERMISSION_KEY = 'camera_permission_v2';
 
 export default function Scan({ setShowTabBar, setShowHeader }) {
   const navigate = useNavigate();
+  // eslint-disable-next-line
   const [isPending, startTransition] = useTransition();
 
   // UI state

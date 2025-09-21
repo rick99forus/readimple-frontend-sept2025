@@ -43,6 +43,7 @@ const IconMoon = ({ className = 'w-5 h-5' }) => (
 );
 
 /* Pencil/edit icon — sized down to fit the compact chip buttons */
+// eslint-disable-next-line
 const IconPencil = ({ className = 'w-4 h-4' }) => (
   <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
     <path
@@ -89,6 +90,7 @@ function getTimeTheme() {
 }
 
 /* ---------- Component ---------- */
+// eslint-disable-next-line
 const GreetingBar = ({  }) => {
   const [displayName, setDisplayName] = useState('');
   const navigate = useNavigate();

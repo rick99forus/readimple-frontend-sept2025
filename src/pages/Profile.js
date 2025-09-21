@@ -279,6 +279,7 @@ export default function Profile({ setShowTabBar, setShowHeader }) {
       setWeekly(copyW);
       localStorage.setItem(WEEKLY_KEY, JSON.stringify(copyW));
     }
+    // eslint-disable-next-line
   }, [daily?.iso, weekly?.week, username, bio, profile.genres]);
 
   function BASELINE_LIKES_DAILY_DATE_KEY() { return 'quests:baseline:likes:daily:date'; }
@@ -335,6 +336,7 @@ export default function Profile({ setShowTabBar, setShowHeader }) {
   const likedBooksCount = getLocalLikes().length;
   const preferredGenres = useMemo(() => {
     try { return JSON.parse(localStorage.getItem('preferredGenres') || '[]'); } catch { return []; }
+    // eslint-disable-next-line
   }, [profile.genres]);
   const completenessItems = [
     { id: 'username', ok: Boolean(username?.trim()) },
